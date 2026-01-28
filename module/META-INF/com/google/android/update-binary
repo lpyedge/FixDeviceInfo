@@ -1,4 +1,4 @@
-﻿#!/sbin/sh
+#!/sbin/sh
 
 ##########################################################################################
 #
@@ -25,7 +25,7 @@ PROPFILE=true
 POSTFSDATA=false
 
 # Set to true if you need late_start service script
-LATESTART=false
+LATESTART=true
 
 ##########################################################################################
 # Replace list
@@ -85,13 +85,18 @@ on_install() {
   ui_print " "
   ui_print "[Installation Summary]"
   
-  # Check overlay installation
-  if [ -f "$MODPATH/system/vendor/overlay/battery-overlay.apk" ]; then
-    ui_print "✓ Overlay APK installed to:"
+  # Check for direct power_profile.xml replacement (more reliable than RRO)
+  if [ -f "$MODPATH/system/framework/framework-res.apk/res/xml/power_profile.xml" ] || \
+     [ -f "$MODPATH/system/vendor/etc/power_profile.xml" ]; then
+    ui_print "✓ Battery capacity: DIRECT FILE REPLACEMENT"
+    ui_print "  (Most reliable method for power_profile.xml)"
+  elif [ -f "$MODPATH/system/vendor/overlay/battery-overlay.apk" ]; then
+    ui_print "✓ Battery capacity: RRO OVERLAY"
     ui_print "  - /system/vendor/overlay/"
     [ -f "$MODPATH/system/product/overlay/battery-overlay.apk" ] && ui_print "  - /system/product/overlay/"
+    ui_print "  Note: RRO may not work on all ROMs for power_profile"
   else
-    ui_print "⚠️  Warning: Overlay APK not found"
+    ui_print "⚠️  No battery capacity override configured"
   fi
   
   # Check system.prop
@@ -177,8 +182,18 @@ MODID=$(grep_prop id "$TMPDIR/module.prop")
 $BOOTMODE && MODDIRNAME=modules_update || MODDIRNAME=modules
 MODPATH="$NVBASE/$MODDIRNAME/$MODID"
 
+# Clean up any existing installation in BOTH directories to prevent duplicates
+# This is important for KernelSU which may show modules from both locations
+if $BOOTMODE; then
+  # When installing in bootmode, clean both modules and modules_update
+  rm -rf "$NVBASE/modules/$MODID" 2>/dev/null
+  rm -rf "$NVBASE/modules_update/$MODID" 2>/dev/null
+else
+  # In recovery, only clean modules directory
+  rm -rf "$NVBASE/modules/$MODID" 2>/dev/null
+fi
+
 # Create mod paths
-rm -rf "$MODPATH" 2>/dev/null
 mkdir -p "$MODPATH"
 
 ##########################################################################################

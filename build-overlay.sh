@@ -135,17 +135,44 @@ if [ -n "$DEVICE_ID" ] || [ -n "$MODEL_NAME" ] || [ -n "$BRAND" ] || [ -n "$MANU
   echo "🔧 Generating system.prop with custom properties:"
   {
     if [ -n "$DEVICE_ID" ]; then
-      echo "ro.product.device=${DEVICE_ID}"
-      echo "ro.product.system.device=${DEVICE_ID}"
-      echo "ro.product.vendor.device=${DEVICE_ID}"
-      echo "  ✓ Device ID: ${DEVICE_ID}" >&2
+      # Only set display-related device properties (not ro.product.device to avoid risks)
+      echo "ro.product.device.display=${DEVICE_ID}"
+      echo "ro.vendor.product.device.display=${DEVICE_ID}"
+      echo "  ✓ Device ID (display): ${DEVICE_ID}" >&2
     fi
     
     if [ -n "$MODEL_NAME" ]; then
+      # Standard Android model properties
       echo "ro.product.model=${MODEL_NAME}"
       echo "ro.product.system.model=${MODEL_NAME}"
       echo "ro.product.vendor.model=${MODEL_NAME}"
-      echo "  ✓ Model: ${MODEL_NAME}" >&2
+      echo "ro.product.odm.model=${MODEL_NAME}"
+      
+      # Market name properties (unified display name)
+      echo "ro.product.marketname=${MODEL_NAME}"
+      echo "ro.product.odm.marketname=${MODEL_NAME}"
+      echo "ro.product.vendor.marketname=${MODEL_NAME}"
+      
+      # OnePlus/OPPO/OPlus specific
+      echo "ro.vendor.oplus.market.name=${MODEL_NAME}"
+      echo "ro.oppo.market.name=${MODEL_NAME}"
+      echo "ro.oppo.market.enname=${MODEL_NAME}"
+      echo "ro.vendor.oplus.market.enname=${MODEL_NAME}"
+      
+      # vivo specific
+      echo "ro.vendor.vivo.market.name=${MODEL_NAME}"
+      echo "ro.vivo.market.name=${MODEL_NAME}"
+      
+      # Huawei/Honor specific
+      echo "ro.config.marketing_name=${MODEL_NAME}"
+      
+      # Other vendors (ZTE/ASUS/LG)
+      echo "ro.vendor.product.ztename=${MODEL_NAME}"
+      echo "ro.vendor.asus.product.mkt_name=${MODEL_NAME}"
+      echo "ro.lge.petname=${MODEL_NAME}"
+      echo "ro.boot.vendor.lge.petname=${MODEL_NAME}"
+      
+      echo "  ✓ Model: ${MODEL_NAME} (with marketname for all vendors)" >&2
     fi
     
     if [ -n "$BRAND" ]; then
