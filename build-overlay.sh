@@ -236,6 +236,18 @@ echo "📦 Packaging Magisk module..."
 mkdir -p "$DIST_DIR/system/vendor/overlay" "$DIST_DIR/system/product/overlay" "$DIST_DIR/META-INF/com/google/android"
 cp "$BUILD_DIR/battery-overlay.apk" "$DIST_DIR/system/vendor/overlay/"
 cp "$BUILD_DIR/battery-overlay.apk" "$DIST_DIR/system/product/overlay/"
+ 
+# If power_profile.xml exists, also provide direct file replacement (more reliable than RRO)
+if [ -f "$BUILD_RES_DIR/xml/power_profile.xml" ]; then
+  mkdir -p "$DIST_DIR/system/vendor/etc" "$DIST_DIR/system/etc" "$DIST_DIR/system/product/etc"
+  cp "$BUILD_RES_DIR/xml/power_profile.xml" "$DIST_DIR/system/vendor/etc/"
+  cp "$BUILD_RES_DIR/xml/power_profile.xml" "$DIST_DIR/system/etc/"
+  cp "$BUILD_RES_DIR/xml/power_profile.xml" "$DIST_DIR/system/product/etc/"
+  echo "  ✓ power_profile.xml direct replacement included (vendor/etc, system/etc, product/etc)"
+else
+  echo "  ℹ️  No power_profile.xml generated"
+fi
+
 cp "$ROOT_DIR/module/module.prop" "$DIST_DIR/"
 
 # Copy service.sh if exists

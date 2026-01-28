@@ -86,8 +86,7 @@ on_install() {
   ui_print "[Installation Summary]"
   
   # Check for direct power_profile.xml replacement (more reliable than RRO)
-  if [ -f "$MODPATH/system/framework/framework-res.apk/res/xml/power_profile.xml" ] || \
-     [ -f "$MODPATH/system/vendor/etc/power_profile.xml" ]; then
+  if [ -f "$MODPATH/system/vendor/etc/power_profile.xml" ] || [ -f "$MODPATH/system/etc/power_profile.xml" ] || [ -f "$MODPATH/system/product/etc/power_profile.xml" ]; then
     ui_print "✓ Battery capacity: DIRECT FILE REPLACEMENT"
     ui_print "  (Most reliable method for power_profile.xml)"
   elif [ -f "$MODPATH/system/vendor/overlay/battery-overlay.apk" ]; then

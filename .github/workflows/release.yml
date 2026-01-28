@@ -310,6 +310,17 @@ jobs:
         mkdir -p dist/system/product/overlay
         cp build/battery-overlay.apk dist/system/vendor/overlay/
         cp build/battery-overlay.apk dist/system/product/overlay/
+
+        # If power_profile.xml exists, also provide direct file replacement (more reliable than RRO)
+        if [ -f build/res/xml/power_profile.xml ]; then
+          mkdir -p dist/system/vendor/etc dist/system/etc dist/system/product/etc
+          cp build/res/xml/power_profile.xml dist/system/vendor/etc/
+          cp build/res/xml/power_profile.xml dist/system/etc/
+          cp build/res/xml/power_profile.xml dist/system/product/etc/
+          echo "✓ power_profile.xml direct replacement included (vendor/etc, system/etc, product/etc)"
+        else
+          echo "ℹ️  No power_profile.xml generated"
+        fi
         
         cp module/module.prop dist/
         
