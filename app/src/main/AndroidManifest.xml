@@ -3,10 +3,11 @@
     android:versionCode="1"
     android:versionName="1.0">
     <!-- targetPackage must point to the system framework for RRO overlays -->
+    <!-- Removed targetName to avoid matching failures if 'PowerProfile' is not defined in target -->
+    <!-- Changed isStatic to false to allow runtime control and visibility in overlay list -->
     <overlay
         android:targetPackage="android"
-        android:targetName="PowerProfile"
-        android:priority="1"
-        android:isStatic="true" />
+        android:priority="999"
+        android:isStatic="false" />
     <application android:hasCode="false" />
 </manifest>
