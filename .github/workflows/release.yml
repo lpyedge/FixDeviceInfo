@@ -1,0 +1,368 @@
+﻿name: Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      battery_capacity:
+        description: "Battery capacity (mAh) - 电池容量，例如: 5000"
+        required: false
+        default: ""
+      device_id:
+        description: "Device ID (ro.product.device) - 设备代号，例如: alioth"
+        required: false
+        default: ""
+      model_name:
+        description: "Model name (ro.product.model) - 机型名称，例如: Redmi K40"
+        required: false
+        default: ""
+      brand:
+        description: "Brand name (ro.product.brand) - 品牌名称，例如: Redmi"
+        required: false
+        default: ""
+      manufacturer:
+        description: "Manufacturer (ro.product.manufacturer) - 制造商，例如: Xiaomi"
+        required: false
+        default: ""
+      lcd_density:
+        description: "LCD density DPI (ro.sf.lcd_density) - 屏幕密度，例如: 440"
+        required: false
+        default: ""
+      clean_history:
+        description: 'Clean old releases and tags (keep only latest)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # Required for creating releases and managing tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BATTERY_CAPACITY: ${{ github.event.inputs.battery_capacity }}
+      DEVICE_ID: ${{ github.event.inputs.device_id }}
+      MODEL_NAME: ${{ github.event.inputs.model_name }}
+      BRAND: ${{ github.event.inputs.brand }}
+      MANUFACTURER: ${{ github.event.inputs.manufacturer }}
+      LCD_DENSITY: ${{ github.event.inputs.lcd_density }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: "17"
+        distribution: "temurin"
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install platform and build-tools
+      run: |
+        yes | sdkmanager "platforms;android-33" "build-tools;34.0.0"
+
+    - name: Validate Input Parameters
+      run: |
+        set -euo pipefail
+        
+        # Validate battery capacity (if provided)
+        if [ -n "${BATTERY_CAPACITY}" ]; then
+          if ! [[ "${BATTERY_CAPACITY}" =~ ^[0-9]+$ ]]; then
+            echo "❌ Error: battery_capacity must be a positive integer"
+            exit 1
+          fi
+          if [ "${BATTERY_CAPACITY}" -lt 1000 ] || [ "${BATTERY_CAPACITY}" -gt 20000 ]; then
+            echo "⚠️  Warning: battery_capacity ${BATTERY_CAPACITY} seems unusual (expected 1000-20000 mAh)"
+          fi
+        fi
+        
+        # Validate LCD density (if provided)
+        if [ -n "${LCD_DENSITY}" ]; then
+          if ! [[ "${LCD_DENSITY}" =~ ^[0-9]+$ ]]; then
+            echo "❌ Error: lcd_density must be a positive integer"
+            exit 1
+          fi
+          if [ "${LCD_DENSITY}" -lt 120 ] || [ "${LCD_DENSITY}" -gt 640 ]; then
+            echo "⚠️  Warning: lcd_density ${LCD_DENSITY} seems unusual (expected 120-640)"
+          fi
+        fi
+        
+        # Validate device_id format (if provided)
+        if [ -n "${DEVICE_ID}" ]; then
+          if ! [[ "${DEVICE_ID}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "❌ Error: device_id should only contain letters, numbers, hyphens and underscores"
+            exit 1
+          fi
+        fi
+        
+        # Validate string parameters to prevent injection attacks
+        validate_string() {
+          local name=$1
+          local value=$2
+          
+          # Check for newlines, carriage returns, or equals signs
+          if [[ "$value" == *$'\n'* || "$value" == *$'\r'* || "$value" == *"="* ]]; then
+            echo "❌ Error: $name contains invalid characters (newline, carriage return, or equals sign)"
+            exit 1
+          fi
+          
+          # Check for suspicious shell metacharacters
+          if [[ "$value" == *'`'* || "$value" == *'$'* || "$value" == *'\\'* ]]; then
+            echo "❌ Error: $name contains potentially dangerous characters"
+            exit 1
+          fi
+        }
+        
+        [ -n "${MODEL_NAME}" ] && validate_string "model_name" "${MODEL_NAME}"
+        [ -n "${BRAND}" ] && validate_string "brand" "${BRAND}"
+        [ -n "${MANUFACTURER}" ] && validate_string "manufacturer" "${MANUFACTURER}"
+        
+        echo "✅ All input parameters validated successfully"
+
+    - name: Decode Keystore
+      run: echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > release.jks
+
+    - name: Clean build artifacts
+      run: |
+        echo "🧹 Cleaning stale build artifacts..."
+        rm -rf build dist
+        echo "✅ Build environment is clean"
+
+    - name: Apply runtime overrides (capacity / props)
+      run: |
+        set -euo pipefail
+        
+        # Create build directory for generated files
+        mkdir -p build/res
+        cp -a app/src/main/res/. build/res/
+        
+        # Override battery capacity if provided (in build dir, not source)
+        if [ -n "${BATTERY_CAPACITY}" ]; then
+          echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
+          cat > build/res/xml/power_profile.xml <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<power_profile xmlns:android="http://schemas.android.com/apk/res/android">
+    <item name="battery.capacity">${BATTERY_CAPACITY}</item>
+</power_profile>
+EOF
+        fi
+
+        # Generate system.prop with all provided properties
+        if [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ]; then
+          echo "🔧 Generating system.prop with custom properties:"
+          {
+            if [ -n "${DEVICE_ID}" ]; then
+              echo "ro.product.device=${DEVICE_ID}"
+              echo "ro.product.system.device=${DEVICE_ID}"
+              echo "ro.product.vendor.device=${DEVICE_ID}"
+              echo "  ✓ Device ID: ${DEVICE_ID}" >&2
+            fi
+            
+            if [ -n "${MODEL_NAME}" ]; then
+              echo "ro.product.model=${MODEL_NAME}"
+              echo "ro.product.system.model=${MODEL_NAME}"
+              echo "ro.product.vendor.model=${MODEL_NAME}"
+              echo "  ✓ Model: ${MODEL_NAME}" >&2
+            fi
+            
+            if [ -n "${BRAND}" ]; then
+              echo "ro.product.brand=${BRAND}"
+              echo "ro.product.system.brand=${BRAND}"
+              echo "ro.product.vendor.brand=${BRAND}"
+              echo "  ✓ Brand: ${BRAND}" >&2
+            fi
+            
+            if [ -n "${MANUFACTURER}" ]; then
+              echo "ro.product.manufacturer=${MANUFACTURER}"
+              echo "ro.product.system.manufacturer=${MANUFACTURER}"
+              echo "ro.product.vendor.manufacturer=${MANUFACTURER}"
+              echo "  ✓ Manufacturer: ${MANUFACTURER}" >&2
+            fi
+            
+            if [ -n "${LCD_DENSITY}" ]; then
+              echo "ro.sf.lcd_density=${LCD_DENSITY}"
+              echo "  ✓ LCD Density: ${LCD_DENSITY} DPI" >&2
+            fi
+          } > build/system.prop
+          echo "  ✓ system.prop generated"
+        else
+          echo "ℹ️  No system properties to override"
+          touch build/no_system_prop
+        fi
+
+    - name: Build and Sign APK
+      env:
+        ALIAS: ${{ secrets.ALIAS }}
+        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        set -euo pipefail
+        BUILD_TOOL_PATH=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+        AAPT2="$BUILD_TOOL_PATH/aapt2"
+        APKSIGNER="$BUILD_TOOL_PATH/apksigner"
+        ANDROID_JAR="$ANDROID_HOME/platforms/android-33/android.jar"
+
+        # Compile resources from build directory (not source)
+        "$AAPT2" compile --dir build/res -o build/resources.zip
+        "$AAPT2" link -o build/unsigned.apk \
+          -I "$ANDROID_JAR" \
+          --manifest app/src/main/AndroidManifest.xml \
+          build/resources.zip
+
+        "$APKSIGNER" sign --ks release.jks \
+          --ks-key-alias "$ALIAS" \
+          --ks-pass pass:${KEY_STORE_PASSWORD} \
+          --key-pass pass:${KEY_PASSWORD} \
+          --out build/battery-overlay.apk \
+          build/unsigned.apk
+
+    - name: Package Magisk Module
+      run: |
+        set -euo pipefail
+        # Install overlay to both vendor and product for better compatibility
+        mkdir -p dist/system/vendor/overlay
+        mkdir -p dist/system/product/overlay
+        cp build/battery-overlay.apk dist/system/vendor/overlay/
+        cp build/battery-overlay.apk dist/system/product/overlay/
+        
+        cp module/module.prop dist/
+        
+        # Copy optional scripts
+        [ -f module/service.sh ] && cp module/service.sh dist/
+        [ -f module/uninstall.sh ] && cp module/uninstall.sh dist/
+        
+        # Copy system.prop only if it was generated
+        if [ -f build/system.prop ]; then
+          cp build/system.prop dist/
+          echo "✓ system.prop included"
+        else
+          echo "ℹ️  No system.prop (no property overrides)"
+        fi
+
+        mkdir -p dist/META-INF/com/google/android
+        # Use the standard Magisk installer template
+        cp module/META-INF/com/google/android/update-binary dist/META-INF/com/google/android/
+        echo '#MAGISK' > dist/META-INF/com/google/android/updater-script
+        chmod +x dist/META-INF/com/google/android/update-binary
+
+        # Remove old zip if exists (prevent append)
+        rm -f DeviceInfoFixModule.zip
+        
+        cd dist
+        zip -r ../DeviceInfoFixModule.zip .
+
+    - name: Clean old releases and tags
+      if: ${{ github.event.inputs.clean_history == 'true' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        echo "🧹 Cleaning old releases and tags..."
+        
+        # Get all releases and delete them
+        gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
+          echo "Deleting release: $tag"
+          gh release delete "$tag" --yes --cleanup-tag || echo "Failed to delete release $tag"
+        done
+        
+        # Get all remaining tags and delete them
+        git tag -l | while read -r tag; do
+          echo "Deleting tag: $tag"
+          git push origin --delete "$tag" || echo "Failed to delete remote tag $tag"
+          git tag -d "$tag" || echo "Failed to delete local tag $tag"
+        done
+        
+        echo "✅ History cleanup completed"
+
+    - name: Generate Release Tag
+      id: tag
+      run: |
+        # Generate version tag based on parameters
+        VERSION="v2.0-$(date +'%Y%m%d-%H%M%S')"
+        
+        # Build descriptive suffix from parameters
+        SUFFIX=""
+        [ -n "${BATTERY_CAPACITY}" ] && SUFFIX="${SUFFIX}-${BATTERY_CAPACITY}mAh"
+        [ -n "${DEVICE_ID}" ] && SUFFIX="${SUFFIX}-${DEVICE_ID}"
+        [ -n "${LCD_DENSITY}" ] && SUFFIX="${SUFFIX}-${LCD_DENSITY}dpi"
+        
+        # Truncate suffix if too long
+        if [ ${#SUFFIX} -gt 50 ]; then
+          SUFFIX="${SUFFIX:0:50}"
+        fi
+        
+        TAG="${VERSION}${SUFFIX}"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "📦 Release tag: $TAG"
+
+    - name: Create Release Notes
+      id: notes
+      run: |
+        cat > release_notes.md <<EOF
+        ## Device Info Fix Module - Release Build
+        
+        **Build Date**: $(date +'%Y-%m-%d %H:%M:%S UTC')
+        
+        ### Configuration
+        
+        EOF
+        
+        if [ -n "${BATTERY_CAPACITY}" ] || [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ]; then
+          echo "| Parameter | Value |" >> release_notes.md
+          echo "|-----------|-------|" >> release_notes.md
+          [ -n "${BATTERY_CAPACITY}" ] && echo "| Battery Capacity | ${BATTERY_CAPACITY} mAh |" >> release_notes.md
+          [ -n "${DEVICE_ID}" ] && echo "| Device ID | ${DEVICE_ID} |" >> release_notes.md
+          [ -n "${MODEL_NAME}" ] && echo "| Model Name | ${MODEL_NAME} |" >> release_notes.md
+          [ -n "${BRAND}" ] && echo "| Brand | ${BRAND} |" >> release_notes.md
+          [ -n "${MANUFACTURER}" ] && echo "| Manufacturer | ${MANUFACTURER} |" >> release_notes.md
+          [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI |" >> release_notes.md
+        else
+          echo "⚠️ **Default configuration** (no custom parameters)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "This build only includes the overlay APK without system property overrides." >> release_notes.md
+        fi
+        
+        cat >> release_notes.md <<EOF
+        
+        ### Installation
+        
+        1. Download \`DeviceInfoFixModule.zip\`
+        2. Open Magisk Manager
+        3. Tap "Modules" → "Install from storage"
+        4. Select the downloaded ZIP file
+        5. Reboot your device
+        
+        ### Security
+        
+        - Signed with official keystore
+        - SHA256 checksum: \`$(sha256sum DeviceInfoFixModule.zip | cut -d' ' -f1)\`
+        
+        ### Support
+        
+        - Magisk: v20.4+
+        - Android: 10+
+        - For issues, please report at: https://github.com/${{ github.repository }}/issues
+        EOF
+        
+        echo "📝 Release notes generated"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: DeviceInfoFixModule
+        path: DeviceInfoFixModule.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.tag.outputs.tag }}
+        name: "Device Info Fix Module ${{ steps.tag.outputs.tag }}"
+        body_path: release_notes.md
+        files: DeviceInfoFixModule.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

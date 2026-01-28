@@ -1,0 +1,210 @@
+﻿#!/sbin/sh
+
+##########################################################################################
+#
+# Magisk Module Installer Script
+#
+##########################################################################################
+
+GREP="grep"
+SED="sed"
+
+##########################################################################################
+# Config Flags
+##########################################################################################
+
+# Set to true if you do *NOT* want Magisk to mount
+# any files for you. Most modules would NOT want
+# to set this flag to true
+SKIP_MOUNT=false
+
+# Set to true if you need to load system.prop
+PROPFILE=true
+
+# Set to true if you need post-fs-data script
+POSTFSDATA=false
+
+# Set to true if you need late_start service script
+LATESTART=false
+
+##########################################################################################
+# Replace list
+##########################################################################################
+
+# List all directories you want to directly replace in the system
+# Check the documentations for more info why you would need this
+
+# Construct your list in the following format
+# This is an example
+REPLACE_EXAMPLE="
+/system/app/Youtube
+/system/priv-app/SystemUI
+/system/priv-app/Settings
+/system/framework
+"
+
+# Construct your own list here
+REPLACE="
+"
+
+##########################################################################################
+#
+# Function Callbacks
+#
+# If you need boot scripts, DO NOT use general boot scripts (post-fs-data.d/service.d)
+# ONLY use module scripts as it respects the module status (remove/disable) and is
+# guaranteed to maintain the same behavior in future Magisk releases.
+# Enable boot scripts by setting the flags in the config section above.
+#
+##########################################################################################
+
+# Set what you want to display when installing your module
+
+print_modname() {
+  ui_print "*******************************"
+  ui_print "   Device Info Fix Module    "
+  ui_print "*******************************"
+}
+
+# Copy/extract your module files into $MODPATH in on_install.
+
+on_install() {
+  # Extract required files first (keep error output for troubleshooting)
+  ui_print "- Extracting module files"
+  unzip -o "$ZIPFILE" 'system/*' 'module.prop' -d "$MODPATH" >&2
+  
+  # Verify critical files
+  [ ! -f "$MODPATH/module.prop" ] && abort "! Module installation failed: module.prop not found"
+  
+  # Extract optional files silently (won't fail if missing)
+  unzip -o "$ZIPFILE" 'service.sh' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'system.prop' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'uninstall.sh' -d "$MODPATH" >/dev/null 2>&1 || true
+  
+  # Display installation details
+  ui_print " "
+  ui_print "[Installation Summary]"
+  
+  # Check overlay installation
+  if [ -f "$MODPATH/system/vendor/overlay/battery-overlay.apk" ]; then
+    ui_print "✓ Overlay APK installed to:"
+    ui_print "  - /system/vendor/overlay/"
+    [ -f "$MODPATH/system/product/overlay/battery-overlay.apk" ] && ui_print "  - /system/product/overlay/"
+  else
+    ui_print "⚠️  Warning: Overlay APK not found"
+  fi
+  
+  # Check system.prop
+  if [ -f "$MODPATH/system.prop" ]; then
+    ui_print "✓ System properties override: ENABLED"
+    ui_print "  Custom device info will be applied"
+  else
+    ui_print "- System properties: using defaults"
+    ui_print "  (No custom device info configured)"
+  fi
+  
+  ui_print " "
+  ui_print "Module installed successfully!"
+  ui_print "Reboot required to apply changes."
+}
+
+# Only some special files require specific permissions
+# This function will be called after on_install is done
+# The default permissions should be good enough for most cases
+
+set_permissions() {
+  # The following is the default rule, DO NOT remove
+  set_perm_recursive "$MODPATH" 0 0 0755 0644
+
+  # Set executable permissions for scripts
+  [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
+  [ -f "$MODPATH/uninstall.sh" ] && set_perm "$MODPATH/uninstall.sh" 0 0 0755
+
+  # Here are some examples:
+  # set_perm_recursive  $MODPATH/system/lib       0     0       0755      0644
+  # set_perm  $MODPATH/system/bin/app_process32   0     2000    0755      u:object_r:zygote_exec:s0
+  # set_perm  $MODPATH/system/bin/dex2oat         0     2000    0755      u:object_r:dex2oat_exec:s0
+  # set_perm  $MODPATH/system/lib/libart.so       0     0       0644
+}
+
+##########################################################################################
+# MMT Extended Logic - Don't modify anything after this
+##########################################################################################
+
+OUTFD=/proc/self/fd/$2
+ZIPFILE=$3
+
+mount /data 2>/dev/null
+
+# Load utility functions
+if [ -f /data/adb/magisk/util_functions.sh ]; then
+  . /data/adb/magisk/util_functions.sh
+  NVBASE=/data/adb
+else
+  require_new_magisk() {
+    ui_print "*******************************"
+    ui_print " Please install Magisk v20.4+! "
+    ui_print "*******************************"
+    exit 1
+  }
+fi
+
+# Preperation for flashable zips
+setup_flashable
+
+# Mount partitions
+mount_partitions
+
+# Detect version and architecture
+api_level_arch_detect
+
+# Setup busybox and binaries
+$BOOTMODE && boot_actions || recovery_actions
+
+##########################################################################################
+# Preparation
+##########################################################################################
+
+# Extract prop file
+unzip -o "$ZIPFILE" module.prop -d "$TMPDIR" >&2
+[ ! -f "$TMPDIR/module.prop" ] && abort "! Unable to extract zip file!"
+
+$BOOTMODE && MODDIRNAME=modules_update || MODDIRNAME=modules
+MODPATH="$NVBASE/$MODDIRNAME/$MODID"
+
+# Create mod paths
+rm -rf "$MODPATH" 2>/dev/null
+mkdir -p "$MODPATH"
+
+##########################################################################################
+# Install
+##########################################################################################
+
+print_modname
+
+on_install
+
+# Handle replace folders
+for TARGET in $REPLACE; do
+  ui_print "- Replace: $TARGET"
+  mktouch "$MODPATH$TARGET/.replace"
+done
+
+# Note: system.prop, post-fs-data.sh, service.sh are automatically
+# handled by Magisk if they exist in $MODPATH root directory.
+# No need to manually copy them.
+
+ui_print "- Setting permissions"
+set_permissions
+
+##########################################################################################
+# Finalizing
+##########################################################################################
+
+cd /
+$BOOTMODE || recovery_cleanup
+rm -rf $TMPDIR
+
+ui_print "- Done"
+ui_print " "
+exit 0

@@ -1,0 +1,7 @@
+﻿<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.battery.overlay"
+    android:versionCode="1"
+    android:versionName="1.0">
+    <!-- targetPackage must point to the system framework for RRO overlays -->
+    <overlay android:targetPackage="android" android:priority="1" android:isStatic="true"/>
+</manifest>

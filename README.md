@@ -1,0 +1,541 @@
+# Device Info Fix Magisk Module
+
+<div align="center">
+
+**专为混刷系统包用户设计的设备信息修正模块**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Magisk](https://img.shields.io/badge/Magisk-20%2B-00B39B?logo=magisk)](https://github.com/topjohnwu/Magisk)
+[![Android](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android)](https://www.android.com/)
+
+</div>
+
+---
+
+## 📖 项目简介
+
+本项目提供一个轻量级的 Magisk 模块，通过 **RRO（Runtime Resource Overlay）** 和 **system.prop** 覆盖机制，修正混刷系统包后的设备信息显示问题。
+
+### 🎯 适用场景
+
+✅ **混刷系统包场景**：底包和驱动正确，但系统镜像来自其他机型  
+✅ **更换大容量电池**：系统显示电池容量不准确  
+✅ **跨区域刷机**：设置中显示的机型名称、品牌与实际硬件不符  
+✅ **定制 ROM 优化**：调整屏幕 DPI 以获得更好的显示效果  
+
+### ⚡ 核心特性
+
+- 🔋 **电池容量修正**：通过 RRO 覆盖 `power_profile.xml`，解决电量计算和显示问题
+- 📱 **设备标识覆盖**：修正机型名称、品牌、制造商等显示信息
+- 🎨 **屏幕密度调整**：自定义 DPI 以优化显示效果
+- ✅ **参数校验保护**：自动验证输入参数，防止配置错误
+- 🚀 **自动化构建**：GitHub Actions 云端构建或本地脚本一键打包
+- 🔒 **签名安全**：使用标准 Android 签名流程，确保模块可信
+
+---
+
+## 🛡️ 安全性说明
+
+### ✅ 安全可修改的属性
+
+本模块**仅修改显示层面和软件识别层面**的属性，不涉及底层硬件接口：
+
+| 属性类别 | 说明 | 影响范围 |
+|---------|------|---------|
+| **电池容量** | 修正电量百分比计算和显示 | 系统设置、状态栏、电池管理 |
+| **设备标识** | 机型名称、设备 ID、品牌 | 系统信息显示、应用兼容性识别 |
+| **屏幕密度** | DPI 显示缩放 | UI 元素大小、布局 |
+
+### ⚠️ 不建议修改的属性
+
+| 属性类型 | 为什么不建议修改 | 风险 |
+|---------|----------------|------|
+| **CPU 信息** | 从 `/proc/cpuinfo` 硬件直接读取 | 性能优化错误、应用崩溃 |
+| **RAM 大小** | 从内核 `/proc/meminfo` 读取 | prop 覆盖无效且可能引起兼容性问题 |
+| **硬件序列号** | 涉及设备唯一标识 | 可能影响授权验证、设备管理 |
+| **指纹/安全属性** | 涉及系统安全验证 | 可能导致 SafetyNet 失败、系统不稳定 |
+
+**原则**：底包和驱动已正确的情况下，只修正"软件层面的显示问题"，不触碰硬件层面的属性。
+
+---
+
+## 📋 支持的参数
+
+### 1. 电池容量 (`battery_capacity`)
+
+**说明**：修正系统识别的电池容量（单位：mAh）  
+**示例**：`5000`、`4500`、`6000`  
+**验证规则**：必须是 1000-20000 之间的正整数  
+**适用场景**：更换大容量电池、混刷系统包导致电量显示不准  
+**安全性**：自动验证数值范围，防止无效输入
+
+```bash
+# 环境变量方式（本地构建）
+export BATTERY_CAPACITY=5000
+```
+
+---
+
+### 2. 设备 ID (`device_id`)
+
+**说明**：覆盖 `ro.product.device`（设备代号）  
+**示例**：`alioth`、`munch`、`sweet`  
+**验证规则**：只能包含字母、数字、连字符和下划线  
+**适用场景**：混刷后设备代号显示错误
+
+```bash
+# 环境变量方式
+export DEVICE_ID=alioth
+```
+
+**覆盖的属性**：
+- `ro.product.device`
+- `ro.product.system.device`
+- `ro.product.vendor.device`
+
+---
+
+### 3. 机型名称 (`model_name`)
+
+**说明**：覆盖 `ro.product.model`（设置中显示的机型名称）  
+**示例**：`Redmi K40`、`Mi 11 Ultra`、`POCO F3`  
+**适用场景**：设置 → 关于手机中显示的名称不正确  
+**安全性**：自动过滤换行符、等号、Shell 元字符，防止注入攻击
+
+```bash
+# 环境变量方式
+export MODEL_NAME="Redmi K40"
+```
+
+**覆盖的属性**：
+- `ro.product.model`
+- `ro.product.system.model`
+- `ro.product.vendor.model`
+
+---
+
+### 4. 品牌名称 (`brand`)
+
+**说明**：覆盖 `ro.product.brand`（品牌标识）  
+**示例**：`Redmi`、`Xiaomi`、`POCO`  
+**适用场景**：品牌信息显示不正确
+
+```bash
+# 环境变量方式
+export BRAND=Redmi
+```
+
+**覆盖的属性**：
+- `ro.product.brand`
+- `ro.product.system.brand`
+- `ro.product.vendor.brand`
+
+---
+
+### 5. 制造商 (`manufacturer`)
+
+**说明**：覆盖 `ro.product.manufacturer`（制造商）  
+**示例**：`Xiaomi`、`OnePlus`、`Samsung`  
+**适用场景**：制造商信息显示不正确
+
+```bash
+# 环境变量方式
+export MANUFACTURER=Xiaomi
+```
+
+**覆盖的属性**：
+- `ro.product.manufacturer`
+- `ro.product.system.manufacturer`
+- `ro.product.vendor.manufacturer`
+
+---
+
+### 6. 屏幕密度 (`lcd_density`)
+
+**说明**：覆盖 `ro.sf.lcd_density`（屏幕 DPI）  
+**示例**：`440`、`480`、`560`  
+**验证规则**：必须是 120-640 之间的正整数  
+**适用场景**：优化显示效果、UI 元素大小调整
+
+```bash
+# 环境变量方式
+export LCD_DENSITY=440
+```
+
+**常见 DPI 参考**：
+- `320` - mdpi（中密度）
+- `480` - xxhdpi（超高密度）
+- `560` - xxxhdpi（超超高密度）
+
+**覆盖的属性**：
+- `ro.sf.lcd_density`
+
+---
+
+## 🚀 使用步骤
+
+### 方式一：GitHub Actions（推荐）
+
+#### 首次配置（仅需一次）
+
+1. **生成签名密钥**（如果还没有）：
+
+```bash
+keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-alias
+```
+
+2. **将密钥转换为 Base64**：
+
+```bash
+# Linux/macOS
+base64 release.jks | tr -d '\n' > release.jks.base64
+
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("release.jks")) | Out-File -Encoding ASCII release.jks.base64
+```
+
+3. **在 GitHub 仓库中添加 Secrets**：
+
+前往 `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+
+| Secret 名称 | 说明 | 示例 |
+|------------|------|------|
+| `SIGNING_KEY` | Base64 编码的 `release.jks` | （从 `release.jks.base64` 文件复制） |
+| `ALIAS` | 密钥别名 | `my-alias` |
+| `KEY_STORE_PASSWORD` | 密钥库密码 | 创建密钥时设置的密码 |
+| `KEY_PASSWORD` | 密钥密码 | 创建密钥时设置的密码 |
+
+#### 构建模块
+
+4. **触发构建**：
+
+   - 进入仓库的 `Actions` 标签页
+   - 选择 `Build Magisk Overlay Module` workflow
+   - 点击 `Run workflow`
+   - 填写需要修改的参数（均为可选）
+
+5. **下载模块**：
+
+   - 等待构建完成（约 2-3 分钟）
+   - 在 workflow 运行详情页面的 `Artifacts` 区域
+   - 下载 `DeviceInfoFixModule.zip`
+
+6. **安装模块**：
+
+   - 打开 Magisk Manager
+   - 点击 `模块` → `从本地安装`
+   - 选择下载的 `DeviceInfoFixModule.zip`
+   - 重启设备生效
+
+---
+
+### 方式二：本地构建
+
+#### 环境要求
+
+- **推荐平台**：Linux / Windows (WSL) / macOS (需 GNU 工具)
+- Bash shell (4.0+)
+- Android SDK（包含 `build-tools` 和 `platforms/android-33`）
+- Java 17+
+
+**重要注意 - 平台兼容性**：
+
+1. **macOS/BSD 用户必须安装 GNU coreutils**：
+   ```bash
+   # macOS
+   brew install coreutils
+   
+   # 确认 base64 支持 -d 参数（非 BSD 版本）
+   which base64  # 应该显示 /usr/local/opt/coreutils/libexec/gnubin/base64
+   ```
+   
+   或者使用 WSL/Docker 容器以获得更好的兼容性。
+
+2. **Keystore 安全注意事项**：
+   - 脚本会将 keystore 临时复制到 `build/` 目录，构建完成后自动清理
+   - **不要**将项目目录放在同步盘（Dropbox/OneDrive）中
+   - **不要**将 `release.jks` 提交到 Git 仓库（已在 `.gitignore` 中）
+   - 优先使用环境变量 `SIGNING_KEY_B64` 传递密钥
+
+#### 构建步骤
+
+1. **设置 Android SDK 环境变量**：
+
+```bash
+export ANDROID_HOME=/path/to/android-sdk
+```
+
+2. **准备签名密钥**：
+
+将 `release.jks` 放在项目根目录，或通过环境变量提供：
+
+```bash
+export SIGNING_KEY_B64="<base64-encoded-keystore>"
+export ALIAS="my-alias"
+export KEY_STORE_PASSWORD="your-password"
+export KEY_PASSWORD="your-password"
+```
+
+3. **设置自定义参数**（可选）：
+
+```bash
+export BATTERY_CAPACITY=5000
+export DEVICE_ID=alioth
+export MODEL_NAME="Redmi K40"
+export BRAND=Redmi
+export MANUFACTURER=Xiaomi
+export LCD_DENSITY=440
+```
+
+4. **执行构建脚本**：
+
+```bash
+bash build-overlay.sh
+```
+
+5. **安装生成的模块**：
+
+构建完成后会生成 `DeviceInfoFixModule.zip`，通过 Magisk Manager 安装。
+
+---
+
+## 💡 使用示例
+
+### 示例 1：仅修正电池容量
+
+**场景**：更换了 5000mAh 的大容量电池，系统仍显示原厂 4500mAh
+
+**参数配置**：
+```
+battery_capacity: 5000
+```
+
+**效果**：系统电量百分比计算准确，设置中显示正确容量
+
+---
+
+### 示例 2：修正混刷机型信息
+
+**场景**：Redmi K40 刷了 POCO F3 的系统包，设置中显示 POCO F3
+
+**参数配置**：
+```
+device_id: alioth
+model_name: Redmi K40
+brand: Redmi
+manufacturer: Xiaomi
+```
+
+**效果**：
+- 设置 → 关于手机 → 显示 "Redmi K40"
+- 品牌显示为 "Redmi"
+- 应用商店正确识别设备型号
+
+---
+
+### 示例 3：完整配置（电池 + 机型 + DPI）
+
+**场景**：跨区域混刷 + 更换电池 + 优化显示
+
+**参数配置**：
+```
+battery_capacity: 5000
+device_id: alioth
+model_name: Redmi K40
+brand: Redmi
+manufacturer: Xiaomi
+lcd_density: 440
+```
+
+**效果**：
+- ✅ 电池容量显示 5000mAh
+- ✅ 机型显示正确
+- ✅ UI 按 440 DPI 渲染，显示更清晰
+
+---
+
+### 示例 4：仅调整屏幕密度
+
+**场景**：UI 元素太大或太小，希望调整显示缩放
+
+**参数配置**：
+```
+lcd_density: 480
+```
+
+**效果**：系统 UI 按 480 DPI 重新渲染（重启后生效）
+
+---
+
+## 🔧 技术原理
+
+### RRO 覆盖机制
+
+本模块使用 Android 的 **Runtime Resource Overlay (RRO)** 技术：
+
+1. 编译一个签名的 overlay APK (`battery-overlay.apk`)
+2. 同时安装到以下目录以确保兼容性：
+   - `/system/vendor/overlay/`（传统路径）
+   - `/system/product/overlay/`（Android 10+ 优先路径）
+3. 在 `AndroidManifest.xml` 中声明 `targetPackage="android"`
+4. 系统启动时自动加载覆盖的资源（`power_profile.xml`）
+
+**为什么安装到两个位置？**
+- Android 10+ 部分设备优先加载 `/system/product/overlay/`
+- GSI/A-B 分区设备可能不加载 vendor overlay
+- 双路径安装确保最大兼容性
+
+### system.prop 覆盖机制
+
+Magisk 支持通过模块中的 `system.prop` 文件覆盖系统属性：
+
+1. 模块中包含 `system.prop` 文件
+2. Magisk 在启动时注入这些属性
+3. 覆盖原有的 `ro.product.*` 属性
+
+### 构建流程
+
+```
+输入参数 → 参数校验 → 生成 XML/Prop 文件 → 编译资源 → 签名 APK → 打包模块
+```
+
+**使用的工具**：
+- `aapt2`：编译和链接 Android 资源
+- `apksigner`：对 APK 进行签名
+- `zip`：打包 Magisk 模块
+
+---
+
+## 📁 项目结构
+
+```
+FixDeviceInfo/
+├── .github/
+│   └── workflows/
+│       └── build.yml              # GitHub Actions 自动化构建
+├── app/
+│   └── src/
+│       └── main/
+│           ├── AndroidManifest.xml  # RRO 清单文件
+│           └── res/
+│               └── xml/
+│                   └── power_profile.xml  # 电池配置文件
+├── module/
+│   ├── module.prop               # Magisk 模块元数据
+│   ├── service.sh                # 模块启动脚本（可选）
+│   ├── system.prop               # 系统属性覆盖（动态生成）
+│   └── META-INF/
+│       └── com/google/android/
+│           └── update-binary     # Magisk 安装脚本
+├── build-overlay.sh              # 本地构建脚本
+└── README.md                     # 本文档
+```
+
+---
+
+## ❓ 常见问题
+
+### Q1: 模块安装后没有生效？
+
+**排查步骤**：
+1. 确认在 Magisk Manager 中模块已启用
+2. **必须重启设备**才能生效
+3. 检查 Magisk 日志是否有报错
+4. 运行 `getprop ro.product.model` 查看属性是否已覆盖
+
+---
+
+### Q2: 电池容量修改后电量显示异常？
+
+**可能原因**：
+- 输入的容量值与实际电池容量差异太大
+- 需要完全充放电一次以重新校准电池统计
+
+**建议**：
+- 确保输入的容量值与实际电池铭牌一致
+- 充电至 100% 后使用至 5% 以下，重复 2-3 次
+
+---
+
+### Q3: 可以同时安装多个类似模块吗？
+
+**不建议**。多个模块修改相同属性可能冲突，请：
+- 卸载其他修改设备信息的模块
+- 使用本模块的多参数功能一次性配置所有需求
+
+---
+
+### Q4: 修改 DPI 后应用显示异常？
+
+**解决方法**：
+- 清除问题应用的数据缓存
+- 部分应用不支持自适应 DPI，恢复默认值即可
+- 尝试其他 DPI 值（推荐 420、440、480、560）
+
+---
+
+### Q5: 如何恢复原始设置？
+
+1. 在 Magisk Manager 中禁用或卸载模块
+2. 重启设备
+3. 系统自动恢复原有配置
+
+---
+
+### Q6: 参数校验失败怎么办？
+
+**示例错误**：
+```
+❌ Error: battery_capacity must be a positive integer
+```
+
+**解决方法**：
+- 检查输入格式是否正确（必须是纯数字）
+- 确认数值在合理范围内：
+  - 电池容量：1000-20000 mAh
+  - 屏幕密度：120-640 DPI
+- 设备 ID 仅包含字母、数字、连字符和下划线
+
+---
+
+### Q7: 无参数构建会发生什么？
+
+**说明**：如果构建时不提供任何设备信息参数（仅提供 `battery_capacity`），模块将：
+- ✅ 正常安装 RRO overlay（电池容量修正）
+- ⚠️ **不包含** `system.prop` 文件
+- ℹ️ 安装时显示 "System properties: using defaults"
+
+**Magisk 兼容性**：
+- Magisk v20.4+ 完全支持此场景（`PROPFILE=true` 但 `system.prop` 缺失）
+- 模块可以正常工作，只是不会覆盖设备信息属性
+- 这是**正常设计行为**，不是错误
+
+---
+
+## 📚 参考资料
+
+- [Magisk 官方文档](https://topjohnwu.github.io/Magisk/)
+- [Android Runtime Resource Overlay](https://source.android.com/docs/core/runtime/rros)
+- [Android 系统属性机制](https://source.android.com/docs/core/architecture/configuration/add-system-properties)
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+如果本项目对您有帮助，请给个 ⭐ Star 支持一下！
+
+---
+
+<div align="center">
+
+**Made with ❤️ for Android enthusiasts**
+
+</div>

@@ -1,0 +1,17 @@
+﻿build/
+dist/
+release.jks
+release.jks.base64
+BatteryFixModule.zip
+DeviceInfoFixModule.zip
+*.log
+
+# Do NOT ignore module/system.prop - it should never be committed
+# (always generated at build time)
+module/system.prop
+
+# Build artifacts
+app/src/main/res/xml/power_profile.xml.backup
+
+# Backup files
+README.md.backup
