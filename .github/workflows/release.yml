@@ -182,15 +182,21 @@ jobs:
         mkdir -p build/res
         cp -a app/src/main/res/. build/res/
         
-        # Override battery capacity if provided (in build dir, not source)
+        # Battery capacity config (used by service.sh to patch /odm/etc/... at boot)
         if [ -n "${BATTERY_CAPACITY}" ]; then
           echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
+          echo "${BATTERY_CAPACITY}" > build/battery_capacity.conf
+          # Keep generating overlay resource as optional fallback (may not work on some ROMs)
           cat > build/res/xml/power_profile.xml <<EOF
-        <?xml version="1.0" encoding="utf-8"?>
-        <power_profile xmlns:android="http://schemas.android.com/apk/res/android">
-            <item name="battery.capacity">${BATTERY_CAPACITY}</item>
-        </power_profile>
-        EOF
+<?xml version="1.0" encoding="utf-8"?>
+<power_profile xmlns:android="http://schemas.android.com/apk/res/android">
+    <item name="battery.capacity">${BATTERY_CAPACITY}</item>
+</power_profile>
+EOF
+        else
+          rm -f build/battery_capacity.conf || true
+          # Prevent a no-config build from accidentally shipping the default (tracked) 4500mAh overlay.
+          rm -f build/res/xml/power_profile.xml || true
         fi
 
         # Generate system.prop with all provided properties
@@ -282,6 +288,13 @@ jobs:
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       run: |
         set -euo pipefail
+
+        # If no battery override is configured, skip building the overlay APK.
+        if [ -z "${BATTERY_CAPACITY}" ]; then
+          echo "ℹ️  BATTERY_CAPACITY not set: skip building battery-overlay.apk"
+          exit 0
+        fi
+
         BUILD_TOOL_PATH=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
         AAPT2="$BUILD_TOOL_PATH/aapt2"
         APKSIGNER="$BUILD_TOOL_PATH/apksigner"
@@ -323,21 +336,23 @@ jobs:
         ZIP_NAME="DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
         echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
 
-        # Install overlay to both vendor and product for better compatibility
-        mkdir -p dist/system/vendor/overlay
-        mkdir -p dist/system/product/overlay
-        cp build/battery-overlay.apk dist/system/vendor/overlay/
-        cp build/battery-overlay.apk dist/system/product/overlay/
-
-        # If power_profile.xml exists, also provide direct file replacement (more reliable than RRO)
-        if [ -f build/res/xml/power_profile.xml ]; then
-          mkdir -p dist/system/vendor/etc dist/system/etc dist/system/product/etc
-          cp build/res/xml/power_profile.xml dist/system/vendor/etc/
-          cp build/res/xml/power_profile.xml dist/system/etc/
-          cp build/res/xml/power_profile.xml dist/system/product/etc/
-          echo "✓ power_profile.xml direct replacement included (vendor/etc, system/etc, product/etc)"
+        # Install overlay to both vendor and product for better compatibility (only when built)
+        if [ -f build/battery-overlay.apk ]; then
+          mkdir -p dist/system/vendor/overlay
+          mkdir -p dist/system/product/overlay
+          cp build/battery-overlay.apk dist/system/vendor/overlay/
+          cp build/battery-overlay.apk dist/system/product/overlay/
+          echo "✓ battery-overlay.apk included (RRO fallback)"
         else
-          echo "ℹ️  No power_profile.xml generated"
+          echo "ℹ️  No battery-overlay.apk (no battery override configured)"
+        fi
+
+        # Battery capacity patch config (preferred, works even when overlay is blocked)
+        if [ -f build/battery_capacity.conf ]; then
+          cp build/battery_capacity.conf dist/
+          echo "✓ battery_capacity.conf included (runtime patch on boot)"
+        else
+          echo "ℹ️  No battery capacity override configured"
         fi
         
         cp module/module.prop dist/
@@ -471,7 +486,7 @@ jobs:
         
         ### Installation
         
-        1. Download \`DeviceInfoFixModule.zip\`
+        1. Download \`${ZIP_NAME}\`
         2. Open Magisk Manager
         3. Tap "Modules" → "Install from storage"
         4. Select the downloaded ZIP file
@@ -480,7 +495,7 @@ jobs:
         ### Security
         
         - Signed with official keystore
-        - SHA256 checksum: \`$(sha256sum DeviceInfoFixModule.zip | cut -d' ' -f1)\`
+        - SHA256 checksum: \`$(sha256sum "${ZIP_NAME}" | cut -d' ' -f1)\`
         
         ### Support
         

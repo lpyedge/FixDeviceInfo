@@ -24,6 +24,22 @@ LCD_DENSITY=${LCD_DENSITY:-}
 PRODUCT_NAME=${PRODUCT_NAME:-}
 BUILD_PRODUCT=${BUILD_PRODUCT:-}
 
+trim() {
+  local value="$1"
+  value="${value#${value%%[![:space:]]*}}"
+  value="${value%${value##*[![:space:]]}}"
+  printf "%s" "$value"
+}
+
+BATTERY_CAPACITY=$(trim "$BATTERY_CAPACITY")
+DEVICE_ID=$(trim "$DEVICE_ID")
+MODEL_NAME=$(trim "$MODEL_NAME")
+BRAND=$(trim "$BRAND")
+MANUFACTURER=$(trim "$MANUFACTURER")
+LCD_DENSITY=$(trim "$LCD_DENSITY")
+PRODUCT_NAME=$(trim "$PRODUCT_NAME")
+BUILD_PRODUCT=$(trim "$BUILD_PRODUCT")
+
 # Keystore handling - use build directory to avoid leaving credentials in repo root
 KS_FILE="$BUILD_DIR/release.jks"
 if [ -n "${SIGNING_KEY_B64:-}" ]; then
@@ -121,12 +137,15 @@ cp -a "$ROOT_DIR/app/src/main/res/." "$BUILD_RES_DIR/"
 # Optionally override capacity in build directory (not source)
 if [ -n "$BATTERY_CAPACITY" ]; then
   echo "📊 Setting battery capacity to $BATTERY_CAPACITY mAh"
+  echo "$BATTERY_CAPACITY" > "$BUILD_DIR/battery_capacity.conf"
   cat > "$BUILD_RES_DIR/xml/power_profile.xml" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <power_profile xmlns:android="http://schemas.android.com/apk/res/android">
     <item name="battery.capacity">${BATTERY_CAPACITY}</item>
 </power_profile>
 EOF
+else
+  rm -f "$BUILD_DIR/battery_capacity.conf" 2>/dev/null || true
 fi
 
 # Generate system.prop in build directory (not source)
@@ -212,22 +231,27 @@ else
 fi
 
 # 1) Compile resources
-"$AAPT2" compile --dir "$BUILD_RES_DIR" -o "$BUILD_DIR/resources.zip"
+if [ -n "$BATTERY_CAPACITY" ]; then
+  "$AAPT2" compile --dir "$BUILD_RES_DIR" -o "$BUILD_DIR/resources.zip"
 
-# 2) Link to unsigned APK
-"$AAPT2" link -o "$BUILD_DIR/unsigned.apk" \
-  --auto-add-overlay \
-  -I "$ANDROID_JAR" \
-  --manifest "$ROOT_DIR/app/src/main/AndroidManifest.xml" \
-  "$BUILD_DIR/resources.zip"
+  # 2) Link to unsigned APK
+  "$AAPT2" link -o "$BUILD_DIR/unsigned.apk" \
+    --auto-add-overlay \
+    -I "$ANDROID_JAR" \
+    --manifest "$ROOT_DIR/app/src/main/AndroidManifest.xml" \
+    "$BUILD_DIR/resources.zip"
 
-# 3) Sign APK
-"$APKSIGNER" sign --ks "$KS_FILE" \
-  --ks-key-alias "$KS_ALIAS" \
-  --ks-pass pass:"$KS_PASS" \
-  --key-pass pass:"$KEY_PASS" \
-  --out "$BUILD_DIR/battery-overlay.apk" \
-  "$BUILD_DIR/unsigned.apk"
+  # 3) Sign APK
+  "$APKSIGNER" sign --ks "$KS_FILE" \
+    --ks-key-alias "$KS_ALIAS" \
+    --ks-pass pass:"$KS_PASS" \
+    --key-pass pass:"$KEY_PASS" \
+    --out "$BUILD_DIR/battery-overlay.apk" \
+    "$BUILD_DIR/unsigned.apk"
+else
+  echo "ℹ️  BATTERY_CAPACITY not set: skip building battery-overlay.apk (no battery override)"
+  rm -f "$BUILD_DIR/battery-overlay.apk" "$BUILD_DIR/unsigned.apk" "$BUILD_DIR/resources.zip" 2>/dev/null || true
+fi
 
 # 4) Package Magisk module
 echo "📦 Packaging Magisk module..."
@@ -249,20 +273,25 @@ BUILD_SUFFIX=""
 OUTPUT_ZIP="$ROOT_DIR/DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
 echo "  → Output: $(basename "$OUTPUT_ZIP")"
 
-# Install overlay to both vendor and product for better compatibility
-mkdir -p "$DIST_DIR/system/vendor/overlay" "$DIST_DIR/system/product/overlay" "$DIST_DIR/META-INF/com/google/android"
-cp "$BUILD_DIR/battery-overlay.apk" "$DIST_DIR/system/vendor/overlay/"
-cp "$BUILD_DIR/battery-overlay.apk" "$DIST_DIR/system/product/overlay/"
- 
-# If power_profile.xml exists, also provide direct file replacement (more reliable than RRO)
-if [ -f "$BUILD_RES_DIR/xml/power_profile.xml" ]; then
-  mkdir -p "$DIST_DIR/system/vendor/etc" "$DIST_DIR/system/etc" "$DIST_DIR/system/product/etc"
-  cp "$BUILD_RES_DIR/xml/power_profile.xml" "$DIST_DIR/system/vendor/etc/"
-  cp "$BUILD_RES_DIR/xml/power_profile.xml" "$DIST_DIR/system/etc/"
-  cp "$BUILD_RES_DIR/xml/power_profile.xml" "$DIST_DIR/system/product/etc/"
-  echo "  ✓ power_profile.xml direct replacement included (vendor/etc, system/etc, product/etc)"
+# Prepare module skeleton
+mkdir -p "$DIST_DIR/META-INF/com/google/android"
+
+# Install overlay to both vendor and product for better compatibility (only when configured)
+if [ -n "$BATTERY_CAPACITY" ] && [ -f "$BUILD_DIR/battery-overlay.apk" ]; then
+  mkdir -p "$DIST_DIR/system/vendor/overlay" "$DIST_DIR/system/product/overlay"
+  cp "$BUILD_DIR/battery-overlay.apk" "$DIST_DIR/system/vendor/overlay/"
+  cp "$BUILD_DIR/battery-overlay.apk" "$DIST_DIR/system/product/overlay/"
+  echo "  ✓ battery-overlay.apk included (RRO fallback)"
 else
-  echo "  ℹ️  No power_profile.xml generated"
+  echo "  ℹ️  No battery overlay APK (BATTERY_CAPACITY not set)"
+fi
+ 
+# Battery capacity patch config (preferred, works even when overlay is blocked)
+if [ -f "$BUILD_DIR/battery_capacity.conf" ]; then
+  cp "$BUILD_DIR/battery_capacity.conf" "$DIST_DIR/"
+  echo "  ✓ battery_capacity.conf included (runtime patch on boot)"
+else
+  echo "  ℹ️  No battery capacity override configured"
 fi
 
 cp "$ROOT_DIR/module/module.prop" "$DIST_DIR/"

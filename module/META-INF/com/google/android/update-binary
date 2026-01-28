@@ -78,6 +78,7 @@ on_install() {
   
   # Extract optional files silently (won't fail if missing)
   unzip -o "$ZIPFILE" 'service.sh' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'battery_capacity.conf' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'system.prop' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'uninstall.sh' -d "$MODPATH" >/dev/null 2>&1 || true
   
@@ -85,12 +86,12 @@ on_install() {
   ui_print " "
   ui_print "[Installation Summary]"
   
-  # Check for direct power_profile.xml replacement (more reliable than RRO)
-  if [ -f "$MODPATH/system/vendor/etc/power_profile.xml" ] || [ -f "$MODPATH/system/etc/power_profile.xml" ] || [ -f "$MODPATH/system/product/etc/power_profile.xml" ]; then
-    ui_print "✓ Battery capacity: DIRECT FILE REPLACEMENT"
-    ui_print "  (Most reliable method for power_profile.xml)"
+  # Battery capacity method
+  if [ -f "$MODPATH/battery_capacity.conf" ]; then
+    ui_print "✓ Battery capacity: BIND-MOUNT PATCH (recommended)"
+    ui_print "  - Auto-detects power_profile.xml location and patches it on boot"
   elif [ -f "$MODPATH/system/vendor/overlay/battery-overlay.apk" ]; then
-    ui_print "✓ Battery capacity: RRO OVERLAY"
+    ui_print "✓ Battery capacity: RRO OVERLAY (fallback)"
     ui_print "  - /system/vendor/overlay/"
     [ -f "$MODPATH/system/product/overlay/battery-overlay.apk" ] && ui_print "  - /system/product/overlay/"
     ui_print "  Note: RRO may not work on all ROMs for power_profile"
