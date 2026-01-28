@@ -141,12 +141,12 @@ jobs:
         # Override battery capacity if provided (in build dir, not source)
         if [ -n "${BATTERY_CAPACITY}" ]; then
           echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
-          cat > build/res/xml/power_profile.xml <<EOF
-<?xml version="1.0" encoding="utf-8"?>
-<power_profile xmlns:android="http://schemas.android.com/apk/res/android">
-    <item name="battery.capacity">${BATTERY_CAPACITY}</item>
-</power_profile>
-EOF
+          cat > build/res/xml/power_profile.xml <<'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <power_profile xmlns:android="http://schemas.android.com/apk/res/android">
+            <item name="battery.capacity">${BATTERY_CAPACITY}</item>
+        </power_profile>
+        EOF
         fi
 
         # Generate system.prop with all provided properties
