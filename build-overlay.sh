@@ -21,6 +21,8 @@ MODEL_NAME=${MODEL_NAME:-}
 BRAND=${BRAND:-}
 MANUFACTURER=${MANUFACTURER:-}
 LCD_DENSITY=${LCD_DENSITY:-}
+PRODUCT_NAME=${PRODUCT_NAME:-}
+BUILD_PRODUCT=${BUILD_PRODUCT:-}
 
 # Keystore handling - use build directory to avoid leaving credentials in repo root
 KS_FILE="$BUILD_DIR/release.jks"
@@ -92,6 +94,8 @@ validate_params() {
   [ -n "$MODEL_NAME" ] && validate_string "MODEL_NAME" "$MODEL_NAME"
   [ -n "$BRAND" ] && validate_string "BRAND" "$BRAND"
   [ -n "$MANUFACTURER" ] && validate_string "MANUFACTURER" "$MANUFACTURER"
+  [ -n "$PRODUCT_NAME" ] && validate_string "PRODUCT_NAME" "$PRODUCT_NAME"
+  [ -n "$BUILD_PRODUCT" ] && validate_string "BUILD_PRODUCT" "$BUILD_PRODUCT"
   
   if [ $has_error -eq 1 ]; then
     exit 1
@@ -127,7 +131,7 @@ fi
 
 # Generate system.prop in build directory (not source)
 BUILD_SYSTEM_PROP="$BUILD_DIR/system.prop"
-if [ -n "$DEVICE_ID" ] || [ -n "$MODEL_NAME" ] || [ -n "$BRAND" ] || [ -n "$MANUFACTURER" ] || [ -n "$LCD_DENSITY" ]; then
+if [ -n "$DEVICE_ID" ] || [ -n "$MODEL_NAME" ] || [ -n "$BRAND" ] || [ -n "$MANUFACTURER" ] || [ -n "$LCD_DENSITY" ] || [ -n "$PRODUCT_NAME" ] || [ -n "$BUILD_PRODUCT" ]; then
   echo "🔧 Generating system.prop with custom properties:"
   {
     if [ -n "$DEVICE_ID" ]; then
@@ -161,6 +165,18 @@ if [ -n "$DEVICE_ID" ] || [ -n "$MODEL_NAME" ] || [ -n "$BRAND" ] || [ -n "$MANU
     if [ -n "$LCD_DENSITY" ]; then
       echo "ro.sf.lcd_density=${LCD_DENSITY}"
       echo "  ✓ LCD Density: ${LCD_DENSITY} DPI" >&2
+    fi
+    
+    if [ -n "$PRODUCT_NAME" ]; then
+      echo "ro.product.name=${PRODUCT_NAME}"
+      echo "ro.product.system.name=${PRODUCT_NAME}"
+      echo "ro.product.vendor.name=${PRODUCT_NAME}"
+      echo "  ✓ Product Name: ${PRODUCT_NAME}" >&2
+    fi
+    
+    if [ -n "$BUILD_PRODUCT" ]; then
+      echo "ro.build.product=${BUILD_PRODUCT}"
+      echo "  ✓ Build Product: ${BUILD_PRODUCT}" >&2
     fi
   } > "$BUILD_SYSTEM_PROP"
 else

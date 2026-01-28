@@ -169,6 +169,11 @@ $BOOTMODE && boot_actions || recovery_actions
 unzip -o "$ZIPFILE" module.prop -d "$TMPDIR" >&2
 [ ! -f "$TMPDIR/module.prop" ] && abort "! Unable to extract zip file!"
 
+# Load module info
+MODID=$(grep_prop id "$TMPDIR/module.prop")
+
+[ -z "$MODID" ] && abort "! Invalid module.prop: missing id"
+
 $BOOTMODE && MODDIRNAME=modules_update || MODDIRNAME=modules
 MODPATH="$NVBASE/$MODDIRNAME/$MODID"
 
@@ -203,7 +208,7 @@ set_permissions
 
 cd /
 $BOOTMODE || recovery_cleanup
-rm -rf $TMPDIR
+rm -rf "$TMPDIR"
 
 ui_print "- Done"
 ui_print " "

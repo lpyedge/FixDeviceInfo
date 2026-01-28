@@ -172,6 +172,46 @@ export LCD_DENSITY=440
 
 ---
 
+### 7. 产品名称 (`product_name`)
+
+**说明**：覆盖 `ro.product.name`（产品内部名称）  
+**示例**：`PLQ110`、`CPH2767IN`、`alioth_global`  
+**验证规则**：只能包含字母、数字、连字符和下划线  
+**适用场景**：混刷后产品名称与实际硬件不符，某些应用或服务依赖此属性识别设备
+
+```bash
+# 环境变量方式
+export PRODUCT_NAME=PLQ110
+```
+
+**覆盖的属性**：
+- `ro.product.name`
+- `ro.product.system.name`
+- `ro.product.vendor.name`
+
+**注意**：此属性通常与 `ro.build.product` 配合使用，某些系统服务可能会检查两者是否匹配。
+
+---
+
+### 8. 构建产品名 (`build_product`)
+
+**说明**：覆盖 `ro.build.product`（构建时的产品标识）  
+**示例**：`OP612DL1`、`alioth`、`sweet`  
+**验证规则**：只能包含字母、数字、连字符和下划线  
+**适用场景**：某些应用检查构建产品名与设备 ID 是否一致，混刷后可能不匹配
+
+```bash
+# 环境变量方式
+export BUILD_PRODUCT=OP612DL1
+```
+
+**覆盖的属性**：
+- `ro.build.product`
+
+**注意**：此属性通常应与 `device_id` 保持一致，以避免兼容性问题。
+
+---
+
 ## 🚀 使用步骤
 
 ### 方式一：GitHub Actions（推荐）
@@ -364,6 +404,36 @@ lcd_density: 480
 ```
 
 **效果**：系统 UI 按 480 DPI 重新渲染（重启后生效）
+
+---
+
+### 示例 5：完整配置所有参数（推荐用于跨区混刷）
+
+**场景**：OnePlus Ace 6 刷入其他区域 ROM，需要完整修正设备信息
+
+**参数配置**：
+```
+battery_capacity: 7800
+device_id: OP612DL1
+model_name: Ace 6
+brand: OnePlus
+manufacturer: OnePlus
+lcd_density: 440
+product_name: PLQ110
+build_product: OP612DL1
+```
+
+**效果**：
+- ✅ 电池容量显示 7800mAh（一加 Ace 6 的实际容量）
+- ✅ 机型显示 "Ace 6"
+- ✅ 产品名称和构建产品名与实际硬件一致
+- ✅ 应用商店和系统服务正确识别设备
+- ✅ 屏幕显示优化（440 DPI）
+
+**说明**：
+- `device_id` 和 `build_product` 通常应保持一致
+- `product_name` 是内部标识，某些系统服务会检查
+- 仅设置需要修正的参数，其他可留空使用系统默认值
 
 ---
 

@@ -27,6 +27,14 @@ on:
         description: "LCD density DPI (ro.sf.lcd_density) - 屏幕密度，例如: 440"
         required: false
         default: ""
+      product_name:
+        description: "Product name (ro.product.name) - 产品名称，例如: PLQ110"
+        required: false
+        default: ""
+      build_product:
+        description: "Build product (ro.build.product) - 构建产品名，例如: OP612DL1"
+        required: false
+        default: ""
       clean_history:
         description: 'Clean old releases and tags (keep only latest)'
         required: false
@@ -46,6 +54,8 @@ jobs:
       BRAND: ${{ github.event.inputs.brand }}
       MANUFACTURER: ${{ github.event.inputs.manufacturer }}
       LCD_DENSITY: ${{ github.event.inputs.lcd_density }}
+      PRODUCT_NAME: ${{ github.event.inputs.product_name }}
+      BUILD_PRODUCT: ${{ github.event.inputs.build_product }}
 
     steps:
     - uses: actions/checkout@v4
@@ -118,6 +128,8 @@ jobs:
         [ -n "${MODEL_NAME}" ] && validate_string "model_name" "${MODEL_NAME}"
         [ -n "${BRAND}" ] && validate_string "brand" "${BRAND}"
         [ -n "${MANUFACTURER}" ] && validate_string "manufacturer" "${MANUFACTURER}"
+        [ -n "${PRODUCT_NAME}" ] && validate_string "product_name" "${PRODUCT_NAME}"
+        [ -n "${BUILD_PRODUCT}" ] && validate_string "build_product" "${BUILD_PRODUCT}"
         
         echo "✅ All input parameters validated successfully"
 
@@ -141,7 +153,7 @@ jobs:
         # Override battery capacity if provided (in build dir, not source)
         if [ -n "${BATTERY_CAPACITY}" ]; then
           echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
-          cat > build/res/xml/power_profile.xml <<'EOF'
+          cat > build/res/xml/power_profile.xml <<EOF
         <?xml version="1.0" encoding="utf-8"?>
         <power_profile xmlns:android="http://schemas.android.com/apk/res/android">
             <item name="battery.capacity">${BATTERY_CAPACITY}</item>
@@ -150,7 +162,7 @@ jobs:
         fi
 
         # Generate system.prop with all provided properties
-        if [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ]; then
+        if [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ] || [ -n "${PRODUCT_NAME}" ] || [ -n "${BUILD_PRODUCT}" ]; then
           echo "🔧 Generating system.prop with custom properties:"
           {
             if [ -n "${DEVICE_ID}" ]; then
@@ -184,6 +196,18 @@ jobs:
             if [ -n "${LCD_DENSITY}" ]; then
               echo "ro.sf.lcd_density=${LCD_DENSITY}"
               echo "  ✓ LCD Density: ${LCD_DENSITY} DPI" >&2
+            fi
+            
+            if [ -n "${PRODUCT_NAME}" ]; then
+              echo "ro.product.name=${PRODUCT_NAME}"
+              echo "ro.product.system.name=${PRODUCT_NAME}"
+              echo "ro.product.vendor.name=${PRODUCT_NAME}"
+              echo "  ✓ Product Name: ${PRODUCT_NAME}" >&2
+            fi
+            
+            if [ -n "${BUILD_PRODUCT}" ]; then
+              echo "ro.build.product=${BUILD_PRODUCT}"
+              echo "  ✓ Build Product: ${BUILD_PRODUCT}" >&2
             fi
           } > build/system.prop
           echo "  ✓ system.prop generated"
@@ -310,7 +334,7 @@ jobs:
         
         EOF
         
-        if [ -n "${BATTERY_CAPACITY}" ] || [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ]; then
+        if [ -n "${BATTERY_CAPACITY}" ] || [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ] || [ -n "${PRODUCT_NAME}" ] || [ -n "${BUILD_PRODUCT}" ]; then
           echo "| Parameter | Value |" >> release_notes.md
           echo "|-----------|-------|" >> release_notes.md
           [ -n "${BATTERY_CAPACITY}" ] && echo "| Battery Capacity | ${BATTERY_CAPACITY} mAh |" >> release_notes.md
@@ -319,6 +343,8 @@ jobs:
           [ -n "${BRAND}" ] && echo "| Brand | ${BRAND} |" >> release_notes.md
           [ -n "${MANUFACTURER}" ] && echo "| Manufacturer | ${MANUFACTURER} |" >> release_notes.md
           [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI |" >> release_notes.md
+          [ -n "${PRODUCT_NAME}" ] && echo "| Product Name | ${PRODUCT_NAME} |" >> release_notes.md
+          [ -n "${BUILD_PRODUCT}" ] && echo "| Build Product | ${BUILD_PRODUCT} |" >> release_notes.md
         else
           echo "⚠️ **Default configuration** (no custom parameters)" >> release_notes.md
           echo "" >> release_notes.md
