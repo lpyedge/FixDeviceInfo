@@ -189,6 +189,7 @@ fi
 
 # 2) Link to unsigned APK
 "$AAPT2" link -o "$BUILD_DIR/unsigned.apk" \
+  --auto-add-overlay \
   -I "$ANDROID_JAR" \
   --manifest "$ROOT_DIR/app/src/main/AndroidManifest.xml" \
   "$BUILD_DIR/resources.zip"

@@ -231,6 +231,7 @@ jobs:
         # Compile resources from build directory (not source)
         "$AAPT2" compile --dir build/res -o build/resources.zip
         "$AAPT2" link -o build/unsigned.apk \
+          --auto-add-overlay \
           -I "$ANDROID_JAR" \
           --manifest app/src/main/AndroidManifest.xml \
           build/resources.zip
