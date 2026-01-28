@@ -187,7 +187,7 @@ jobs:
           echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
           echo "${BATTERY_CAPACITY}" > build/battery_capacity.conf
           # Keep generating overlay resource as optional fallback (may not work on some ROMs)
-          cat > build/res/xml/power_profile.xml <<EOF
+          cat > build/res/xml/power_profile.xml <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <power_profile xmlns:android="http://schemas.android.com/apk/res/android">
     <item name="battery.capacity">${BATTERY_CAPACITY}</item>
