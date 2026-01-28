@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 BUILD_DIR="$ROOT_DIR/build"
 DIST_DIR="$ROOT_DIR/dist"
-OUTPUT_ZIP="$ROOT_DIR/DeviceInfoFixModule.zip"
+OUTPUT_ZIP=""  # set later based on config
 
 ANDROID_HOME=${ANDROID_HOME:?"ANDROID_HOME is required"}
 BUILD_TOOL_PATH=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
@@ -110,7 +110,7 @@ validate_params
 echo "🧹 Cleaning up stale build artifacts..."
 rm -f "$ROOT_DIR/module/system.prop"
 rm -rf "$BUILD_DIR" "$DIST_DIR"
-rm -f "$OUTPUT_ZIP"
+rm -f "$ROOT_DIR"/DeviceInfoFix*-Module.zip
 mkdir -p "$BUILD_DIR"
 
 # Stage resources to avoid mutating tracked files
@@ -231,6 +231,23 @@ fi
 
 # 4) Package Magisk module
 echo "📦 Packaging Magisk module..."
+
+# Build zip name with config suffixes
+sanitize() {
+  echo "$1" | sed 's/[^A-Za-z0-9._-]/-/g'
+}
+
+BUILD_SUFFIX=""
+[ -n "$BATTERY_CAPACITY" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-cap${BATTERY_CAPACITY}mAh"
+[ -n "$DEVICE_ID" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-dev$(sanitize "$DEVICE_ID")"
+[ -n "$MODEL_NAME" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-model$(sanitize "$MODEL_NAME")"
+[ -n "$BRAND" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-brand$(sanitize "$BRAND")"
+[ -n "$LCD_DENSITY" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-dpi${LCD_DENSITY}"
+[ -n "$PRODUCT_NAME" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-prod$(sanitize "$PRODUCT_NAME")"
+[ -n "$BUILD_PRODUCT" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-build$(sanitize "$BUILD_PRODUCT")"
+
+OUTPUT_ZIP="$ROOT_DIR/DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
+echo "  → Output: $(basename "$OUTPUT_ZIP")"
 
 # Install overlay to both vendor and product for better compatibility
 mkdir -p "$DIST_DIR/system/vendor/overlay" "$DIST_DIR/system/product/overlay" "$DIST_DIR/META-INF/com/google/android"

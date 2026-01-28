@@ -305,6 +305,24 @@ jobs:
     - name: Package Magisk Module
       run: |
         set -euo pipefail
+
+        sanitize() {
+          # keep letters/numbers/._- and replace others with '-'
+          echo "$1" | sed 's/[^A-Za-z0-9._-]/-/g'
+        }
+
+        BUILD_SUFFIX=""
+        [ -n "${BATTERY_CAPACITY}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-cap${BATTERY_CAPACITY}mAh"
+        [ -n "${DEVICE_ID}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-dev$(sanitize "${DEVICE_ID}")"
+        [ -n "${MODEL_NAME}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-model$(sanitize "${MODEL_NAME}")"
+        [ -n "${BRAND}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-brand$(sanitize "${BRAND}")"
+        [ -n "${LCD_DENSITY}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-dpi${LCD_DENSITY}"
+        [ -n "${PRODUCT_NAME}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-prod$(sanitize "${PRODUCT_NAME}")"
+        [ -n "${BUILD_PRODUCT}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-build$(sanitize "${BUILD_PRODUCT}")"
+
+        ZIP_NAME="DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
+        echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+
         # Install overlay to both vendor and product for better compatibility
         mkdir -p dist/system/vendor/overlay
         mkdir -p dist/system/product/overlay
@@ -343,10 +361,10 @@ jobs:
         chmod +x dist/META-INF/com/google/android/update-binary
 
         # Remove old zip if exists (prevent append)
-        rm -f DeviceInfoFixModule.zip
+        rm -f "${ZIP_NAME}"
         
         cd dist
-        zip -r ../DeviceInfoFixModule.zip .
+        zip -r "../${ZIP_NAME}" .
 
     - name: Clean old releases and tags
       if: ${{ github.event.inputs.clean_history == 'true' }}
@@ -433,16 +451,16 @@ jobs:
         EOF
         
         if [ -n "${BATTERY_CAPACITY}" ] || [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ] || [ -n "${PRODUCT_NAME}" ] || [ -n "${BUILD_PRODUCT}" ]; then
-          echo "| Parameter | Value |" >> release_notes.md
-          echo "|-----------|-------|" >> release_notes.md
-          [ -n "${BATTERY_CAPACITY}" ] && echo "| Battery Capacity | ${BATTERY_CAPACITY} mAh |" >> release_notes.md
-          [ -n "${DEVICE_ID}" ] && echo "| Device ID | ${DEVICE_ID} |" >> release_notes.md
-          [ -n "${MODEL_NAME}" ] && echo "| Model Name | ${MODEL_NAME} |" >> release_notes.md
-          [ -n "${BRAND}" ] && echo "| Brand | ${BRAND} |" >> release_notes.md
-          [ -n "${MANUFACTURER}" ] && echo "| Manufacturer | ${MANUFACTURER} |" >> release_notes.md
-          [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI |" >> release_notes.md
-          [ -n "${PRODUCT_NAME}" ] && echo "| Product Name | ${PRODUCT_NAME} |" >> release_notes.md
-          [ -n "${BUILD_PRODUCT}" ] && echo "| Build Product | ${BUILD_PRODUCT} |" >> release_notes.md
+          echo "| 配置项 (Configuration) | 值 | 说明 |" >> release_notes.md
+          echo "|-----------------------|-----|------|" >> release_notes.md
+          [ -n "${BATTERY_CAPACITY}" ] && echo "| Battery Capacity | ${BATTERY_CAPACITY} mAh | 电池容量 (power_profile.xml) |" >> release_notes.md
+          [ -n "${DEVICE_ID}" ] && echo "| Device Codename (display) | ${DEVICE_ID} | 仅显示用途，不改 ro.product.device |" >> release_notes.md
+          [ -n "${MODEL_NAME}" ] && echo "| Model / Market Name | ${MODEL_NAME} | 同步到所有 marketname/petname 属性 |" >> release_notes.md
+          [ -n "${BRAND}" ] && echo "| Brand | ${BRAND} | ro.product.*.brand |" >> release_notes.md
+          [ -n "${MANUFACTURER}" ] && echo "| Manufacturer | ${MANUFACTURER} | ro.product.*.manufacturer |" >> release_notes.md
+          [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI | ro.sf.lcd_density |" >> release_notes.md
+          [ -n "${PRODUCT_NAME}" ] && echo "| Product Name | ${PRODUCT_NAME} | ro.product.*.name |" >> release_notes.md
+          [ -n "${BUILD_PRODUCT}" ] && echo "| Build Product | ${BUILD_PRODUCT} | ro.build.product |" >> release_notes.md
         else
           echo "⚠️ **Default configuration** (no custom parameters)" >> release_notes.md
           echo "" >> release_notes.md
@@ -477,7 +495,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: DeviceInfoFixModule
-        path: DeviceInfoFixModule.zip
+        path: ${{ env.ZIP_NAME }}
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
@@ -485,7 +503,7 @@ jobs:
         tag_name: ${{ steps.tag.outputs.tag }}
         name: "Device Info Fix Module ${{ steps.tag.outputs.tag }}"
         body_path: release_notes.md
-        files: DeviceInfoFixModule.zip
+        files: ${{ env.ZIP_NAME }}
         draft: false
         prerelease: false
       env:
