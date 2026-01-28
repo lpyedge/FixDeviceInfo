@@ -76,6 +76,22 @@ jobs:
     - name: Validate Input Parameters
       run: |
         set -euo pipefail
+
+        trim() {
+          local value="$1"
+          value="${value#${value%%[![:space:]]*}}"
+          value="${value%${value##*[![:space:]]}}"
+          printf "%s" "$value"
+        }
+
+        BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        DEVICE_ID=$(trim "${DEVICE_ID}")
+        MODEL_NAME=$(trim "${MODEL_NAME}")
+        BRAND=$(trim "${BRAND}")
+        MANUFACTURER=$(trim "${MANUFACTURER}")
+        LCD_DENSITY=$(trim "${LCD_DENSITY}")
+        PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
+        BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
         
         # Validate battery capacity (if provided)
         if [ -n "${BATTERY_CAPACITY}" ]; then
@@ -145,6 +161,22 @@ jobs:
     - name: Apply runtime overrides (capacity / props)
       run: |
         set -euo pipefail
+
+        trim() {
+          local value="$1"
+          value="${value#${value%%[![:space:]]*}}"
+          value="${value%${value##*[![:space:]]}}"
+          printf "%s" "$value"
+        }
+
+        BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        DEVICE_ID=$(trim "${DEVICE_ID}")
+        MODEL_NAME=$(trim "${MODEL_NAME}")
+        BRAND=$(trim "${BRAND}")
+        MANUFACTURER=$(trim "${MANUFACTURER}")
+        LCD_DENSITY=$(trim "${LCD_DENSITY}")
+        PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
+        BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
         
         # Create build directory for generated files
         mkdir -p build/res
@@ -305,6 +337,17 @@ jobs:
     - name: Generate Release Tag
       id: tag
       run: |
+        trim() {
+          local value="$1"
+          value="${value#${value%%[![:space:]]*}}"
+          value="${value%${value##*[![:space:]]}}"
+          printf "%s" "$value"
+        }
+
+        BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        DEVICE_ID=$(trim "${DEVICE_ID}")
+        LCD_DENSITY=$(trim "${LCD_DENSITY}")
+
         # Generate version tag based on parameters
         VERSION="v2.0-$(date +'%Y%m%d-%H%M%S')"
         
@@ -326,6 +369,22 @@ jobs:
     - name: Create Release Notes
       id: notes
       run: |
+        trim() {
+          local value="$1"
+          value="${value#${value%%[![:space:]]*}}"
+          value="${value%${value##*[![:space:]]}}"
+          printf "%s" "$value"
+        }
+
+        BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        DEVICE_ID=$(trim "${DEVICE_ID}")
+        MODEL_NAME=$(trim "${MODEL_NAME}")
+        BRAND=$(trim "${BRAND}")
+        MANUFACTURER=$(trim "${MANUFACTURER}")
+        LCD_DENSITY=$(trim "${LCD_DENSITY}")
+        PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
+        BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
+
         cat > release_notes.md <<EOF
         ## Device Info Fix Module - Release Build
         
