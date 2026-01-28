@@ -187,12 +187,7 @@ jobs:
           echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
           echo "${BATTERY_CAPACITY}" > build/battery_capacity.conf
           # Keep generating overlay resource as optional fallback (may not work on some ROMs)
-          cat > build/res/xml/power_profile.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<power_profile xmlns:android="http://schemas.android.com/apk/res/android">
-    <item name="battery.capacity">${BATTERY_CAPACITY}</item>
-</power_profile>
-XMLEOF
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<power_profile xmlns:android="http://schemas.android.com/apk/res/android">\n    <item name="battery.capacity">%s</item>\n</power_profile>' "${BATTERY_CAPACITY}" > build/res/xml/power_profile.xml
         else
           rm -f build/battery_capacity.conf || true
           # Prevent a no-config build from accidentally shipping the default (tracked) 4500mAh overlay.
