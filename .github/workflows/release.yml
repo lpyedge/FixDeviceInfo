@@ -415,6 +415,13 @@ jobs:
         [ -n "${LCD_DENSITY}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-dpi${LCD_DENSITY}"
         [ -n "${PRODUCT_NAME}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-prod$(sanitize "${PRODUCT_NAME}")"
         [ -n "${BUILD_PRODUCT}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-build$(sanitize "${BUILD_PRODUCT}")"
+        # Include feature flags in ZIP filename when enabled
+        if [ "${OPTIMIZE_VOLUME}" = "true" ]; then
+          BUILD_SUFFIX="${BUILD_SUFFIX}-vol"
+        fi
+        if [ "${BRIGHTNESS_FLOOR}" = "true" ]; then
+          BUILD_SUFFIX="${BUILD_SUFFIX}-bright"
+        fi
 
         ZIP_NAME="DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
         echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
@@ -585,6 +592,12 @@ jobs:
           [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI | 屏幕密度 |" >> release_notes.md
           [ -n "${PRODUCT_NAME}" ] && echo "| Product Name | ${PRODUCT_NAME} | 产品名称 |" >> release_notes.md
           [ -n "${BUILD_PRODUCT}" ] && echo "| Build Product | ${BUILD_PRODUCT} | 构建产品名 |" >> release_notes.md
+          if [ "${OPTIMIZE_VOLUME}" = "true" ]; then
+            echo "| Volume Optimization | enabled | 优化音量曲线（使音量调节更线性） |" >> release_notes.md
+          fi
+          if [ "${BRIGHTNESS_FLOOR}" = "true" ]; then
+            echo "| Brightness Floor | enabled | 启用最低亮度保护以避免暗环境黑屏 |" >> release_notes.md
+          fi
         else
           echo "⚠️ **Default configuration** (no custom parameters)" >> release_notes.md
         fi

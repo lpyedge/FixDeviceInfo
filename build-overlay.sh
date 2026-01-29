@@ -424,6 +424,10 @@ BUILD_SUFFIX=""
 [ -n "$PRODUCT_NAME" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-prod$(sanitize_filename "$PRODUCT_NAME")"
 [ -n "$BUILD_PRODUCT" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-build$(sanitize_filename "$BUILD_PRODUCT")"
 
+# Include runtime feature flags in output filename for traceability
+[ "$OPTIMIZE_VOLUME" = "true" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-vol"
+[ "$BRIGHTNESS_FLOOR" = "true" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-bright"
+
 OUTPUT_ZIP="$ROOT_DIR/DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
 echo "  → Output: $(basename "$OUTPUT_ZIP")"
 
