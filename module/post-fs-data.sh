@@ -4,21 +4,37 @@
 
 MODDIR=${0%/*}
 
-# Force overlay re-registration by disabling and enabling
-# This ensures the system picks up our overlay APKs after module installation
+LOG_FILE="$MODDIR/service.log"
+# Export for sub-scripts
+export MODDIR LOG_FILE
 
-enable_overlay() {
-    local pkg="$1"
-    # Try to enable overlay (it may not be registered yet on first boot)
-    cmd overlay disable "$pkg" 2>/dev/null || true
-    cmd overlay enable "$pkg" 2>/dev/null || true
-    cmd overlay enable --user 0 "$pkg" 2>/dev/null || true
-}
+# Load common functions (needed for logging in post-fs-data)
+if [ -f "$MODDIR/scripts/common.sh" ]; then
+    . "$MODDIR/scripts/common.sh"
+else
+    # Minimal fallback
+    log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_FILE"; }
+fi
 
-# Battery overlay (targets android framework)
-enable_overlay "com.fixdeviceinfo.battery.overlay"
+log "=============================================="
+log "post-fs-data script started (Early Boot)"
 
-# CPU overlay (targets com.android.settings)
-enable_overlay "com.fixdeviceinfo.cpu.overlay"
+# =============================================================================
+# Feature: Battery Capacity Override (Bind-Mount)
+# =============================================================================
+# MUST happen here to precede System Server
+if [ -f "$MODDIR/scripts/battery.sh" ]; then
+    . "$MODDIR/scripts/battery.sh"
+    apply_battery_override
+fi
 
-exit 0
+# =============================================================================
+# Feature: Volume Curve Optimization (Bind-Mount)
+# =============================================================================
+# MUST happen here to precede Audio Service
+if [ -f "$MODDIR/scripts/volume.sh" ]; then
+    . "$MODDIR/scripts/volume.sh"
+    apply_volume_optimization
+fi
+
+log "post-fs-data script completed"

@@ -30,27 +30,30 @@ log "Service script started"
 log "Module path: $MODDIR"
 
 # =============================================================================
-# Feature: Battery Capacity Override
+# Feature: Battery Overlay Enabling (Late Start)
 # =============================================================================
+# Enable overlay if RRO was generated (fallback/supplemental)
 if [ -f "$MODDIR/scripts/battery.sh" ]; then
     . "$MODDIR/scripts/battery.sh"
-    apply_battery_override
+    enable_battery_overlay
 else
-    log "Warning: scripts/battery.sh not found, skip battery override"
+    log "Warning: scripts/battery.sh not found, skip battery overlay"
 fi
 
 # =============================================================================
-# Feature: Volume Curve Optimization
+# Feature: CPU Name Overlay (Late Start)
 # =============================================================================
-if [ -f "$MODDIR/scripts/volume.sh" ]; then
-    . "$MODDIR/scripts/volume.sh"
-    apply_volume_optimization
-else
-    log "Warning: scripts/volume.sh not found, skip volume optimization"
-fi
+# Just ensure it's enabled (simple cmd call)
+enable_cpu_overlay() {
+    local bg_pkg="com.fixdeviceinfo.cpu.overlay"
+    if cmd overlay list 2>/dev/null | grep -q "$bg_pkg"; then
+        cmd overlay enable "$bg_pkg" 2>/dev/null && log "Enabled CPU name overlay"
+    fi
+}
+enable_cpu_overlay
 
 # =============================================================================
-# Feature: Brightness Floor Guard
+# Feature: Brightness Floor Guard (Runtime)
 # =============================================================================
 if [ -f "$MODDIR/scripts/brightness.sh" ]; then
     . "$MODDIR/scripts/brightness.sh"

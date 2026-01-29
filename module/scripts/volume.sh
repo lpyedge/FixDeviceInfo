@@ -36,8 +36,10 @@ find_volume_config() {
 }
 
 # =============================================================================
-# Main Function
+# Main Function (Run in post-fs-data)
 # =============================================================================
+# CRITICAL: This must run in post-fs-data (before Zygote starts)
+# AudioPolicyService reads these files during system server startup.
 apply_volume_optimization() {
     if [ ! -f "$VOLUME_CONF_FILE" ]; then
         log "Volume optimization not enabled, skip"
@@ -90,10 +92,10 @@ apply_volume_optimization() {
     fi
     
     # Create patched file by replacing the DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE section
-    # Use awk for multi-line replacement
+    # FIXED: awk regex to allow flexible whitespace in the reference tag
     awk -v patch="$patch_content" '
     BEGIN { in_section = 0; printed = 0 }
-    /<reference name="DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE">/ {
+    /<reference[[:space:]]+name="DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE">/ {
         in_section = 1
         print patch
         printed = 1
@@ -109,7 +111,6 @@ apply_volume_optimization() {
     # Verify patch was actually applied (check for our signature value)
     if ! grep -q 'point>1,-6000<' "$volume_out" 2>/dev/null; then
         log "Warning: Volume curve patch was NOT applied - source file format may differ"
-        log "Expected: <reference name=\"DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE\">"
         log "Skipping bind-mount to avoid mounting unchanged file"
         rm -f "$volume_out" 2>/dev/null || true
         return 1
@@ -124,10 +125,8 @@ apply_volume_optimization() {
     
     chmod 0644 "$volume_out" 2>/dev/null || true
     
-    # Preserve SELinux context
     preserve_selinux_context "$volume_src" "$volume_out"
     
-    # Bind-mount patched file
     umount "$volume_src" 2>/dev/null || true
     if mount --bind "$volume_out" "$volume_src" 2>/dev/null; then
         log "Bind-mounted patched volume config to $volume_src"
@@ -139,7 +138,7 @@ apply_volume_optimization() {
     log "Volume curve optimization completed"
 }
 
-# Run if executed directly (for testing)
+# Run if executed directly
 if [ "${0##*/}" = "volume.sh" ]; then
     apply_volume_optimization
 fi

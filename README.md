@@ -565,41 +565,26 @@ cpu_name: Dimensity 9200
 
 ## 🔧 技术原理
 
-### 电池容量修正机制（双方案）
+### 1. 电池容量修正机制（时序关键）
+    
+**方案 A（核心）：动态 bind-mount (post-fs-data)**
+这是唯一能够“欺骗” Android 系统服务的有效方式。
+- **执行时机**：`post-fs-data.sh`（Zygote 启动前）
+- **原理**：在此阶段挂载修改后的 `power_profile.xml`，当 `PowerManagerService` 随后启动并读取文件时，它已经是修改过的版本。
+- **注意**：如果通过常规 `service.sh`（开机完成后）修改，系统服务已经读完了旧文件，修改将无效。
 
-由于不同 ROM/厂商对 `power_profile.xml` 的加载与 overlay 限制差异很大，本模块采用“双方案”：
+**方案 B（辅助）：RRO Overlay (service.sh)**
+- **执行时机**：`service.sh`（开机完成后）
+- **原理**：通过 `cmd overlay` 命令显式启用 overlay APK。因为 `cmd` 命令需要 System Server 运行后才能使用，所以必须放在 `service.sh` 中执行。
+- **安装位置**：`/system/product/overlay/`（Android 10+ 标准路径）
 
-**方案 A（推荐）：动态 bind-mount 修补**
-1. 构建时将容量写入 `battery_capacity.conf`
-2. 开机后由 `service.sh` 自动查找真实的 `power_profile.xml` 位置（常见在 `/odm/...`）
-3. 读取原始文件，**只替换** `battery.capacity`，保留 OEM 的完整 profile
-4. 使用 `mount --bind` 将修补后的文件覆盖到原路径
+### 2. CPU 名称修正机制 (Overlay)
+由于 CPU 名称仅用于设置界面的显示（不被底层服务缓存），因此只需要 RRO overlay：
+- 编译并安装 `cpu-overlay.apk` 到 `/system/product/overlay/`
+- 在 `service.sh` 中通过 `cmd overlay enable` 确保其激活
 
-> 未设置 `battery_capacity` 时不会执行该流程。
-
-**方案 B（備用）：RRO 覆蓋**
-1. 編譯一個簽名的 overlay APK (`battery-overlay.apk`)
-2. 安裝到 `/system/product/overlay/`（Android 10+ 標準路徑）
-3. 在 `AndroidManifest.xml` 中聲明 `targetPackage="android"`
-4. 若 ROM 允許，則系統會加載 overlay；否則會被忽略（因此作為備用）
-
-> `battery-overlay.apk` 僅在設置了 `battery_capacity` 時才會被打包；無配置構建不會攜帶默認容量。
-
-### CPU 名稱修正機制（RRO overlay）
-
-與電池不同，CPU 名稱僅用於「設置」應用的顯示，因此只使用 RRO overlay 方案：
-
-1. 編譯一個簽名的 overlay APK (`cpu-overlay.apk`)
-2. 安裝到 `/system/product/overlay/`
-3. `targetPackage="com.android.settings"`，覆蓋 `device_info_processor` 字串資源
-4. 重啟後生效，「設置 → 關於手機 → 處理器」將顯示自定義名稱
-
-> `cpu-overlay.apk` 僅在設置了 `cpu_name` 時才會被打包。
-
-**為什麼使用 `system/product/overlay/`？**
-- Android 10+ 標準 RRO 路徑
-- 相比舊版 `/system/vendor/overlay/` 更可靠
-- GSI/A-B 分區設備完整支持
+### 3. 音量曲线优化 (post-fs-data)
+与电池容量类似，音频策略服务在启动时读取配置文件。因此，音量曲线的 XML 修改和 bind-mount 也必须在 `post-fs-data` 阶段完成。
 
 ### system.prop 覆盖机制
 
