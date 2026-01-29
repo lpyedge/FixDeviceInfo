@@ -92,10 +92,10 @@ apply_volume_optimization() {
     fi
     
     # Create patched file by replacing the DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE section
-    # FIXED: awk regex to allow flexible whitespace in the reference tag
+    # FIXED: awk regex to allow flexible whitespace (0 or more) in the reference tag
     awk -v patch="$patch_content" '
     BEGIN { in_section = 0; printed = 0 }
-    /<reference[[:space:]]+name="DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE">/ {
+    /<reference[[:space:]]*name="DEFAULT_DEVICE_CATEGORY_SPEAKER_VOLUME_CURVE">/ {
         in_section = 1
         print patch
         printed = 1
