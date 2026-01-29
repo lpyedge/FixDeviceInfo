@@ -1,5 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<power_profile xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Adjust this value to match your device's real battery capacity (in mAh) -->
-    <item name="battery.capacity">4500</item>
-</power_profile>

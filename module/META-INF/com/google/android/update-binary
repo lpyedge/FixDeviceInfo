@@ -22,7 +22,8 @@ SKIP_MOUNT=false
 PROPFILE=true
 
 # Set to true if you need post-fs-data script
-POSTFSDATA=false
+# (used to refresh overlay registration on boot)
+POSTFSDATA=true
 
 # Set to true if you need late_start service script
 LATESTART=true
@@ -78,9 +79,36 @@ on_install() {
   
   # Extract optional files silently (won't fail if missing)
   unzip -o "$ZIPFILE" 'service.sh' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'post-fs-data.sh' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'scripts/*' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'battery_capacity.conf' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'model_name.conf' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'optimize_volume.conf' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'volume_curve_patch.xml' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'brightness_floor.conf' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'system.prop' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'uninstall.sh' -d "$MODPATH" >/dev/null 2>&1 || true
+  
+  # ==========================================================================
+  # Clear cached device_name from SettingsProvider (only during install/update)
+  # This ensures our model_name override takes effect on next boot.
+  # User can still change it manually afterwards.
+  # ==========================================================================
+  if [ -f "$MODPATH/model_name.conf" ]; then
+    ui_print "- Preparing device_name override..."
+    
+    # Remove the applied flag to force re-apply on next boot
+    rm -f "$MODPATH/.device_name_applied" 2>/dev/null || true
+    
+    # Try to clear the current device_name setting
+    # This works in bootmode (Magisk Manager install)
+    if $BOOTMODE; then
+      # Clear global device_name so our override takes effect
+      settings delete global device_name >/dev/null 2>&1 || true
+      settings delete secure bluetooth_name >/dev/null 2>&1 || true
+      ui_print "  ✓ Cleared cached device_name (will apply on reboot)"
+    fi
+  fi
   
   # Display installation details
   ui_print " "
@@ -90,13 +118,37 @@ on_install() {
   if [ -f "$MODPATH/battery_capacity.conf" ]; then
     ui_print "✓ Battery capacity: BIND-MOUNT PATCH (recommended)"
     ui_print "  - Auto-detects power_profile.xml location and patches it on boot"
-  elif [ -f "$MODPATH/system/vendor/overlay/battery-overlay.apk" ]; then
-    ui_print "✓ Battery capacity: RRO OVERLAY (fallback)"
-    ui_print "  - /system/vendor/overlay/"
-    [ -f "$MODPATH/system/product/overlay/battery-overlay.apk" ] && ui_print "  - /system/product/overlay/"
-    ui_print "  Note: RRO may not work on all ROMs for power_profile"
-  else
-    ui_print "⚠️  No battery capacity override configured"
+  fi
+  
+  # Check for overlay APKs (new path: system/product/overlay/)
+  if [ -f "$MODPATH/system/product/overlay/battery-overlay.apk" ]; then
+    ui_print "✓ Battery overlay: RRO (system/product/overlay/)"
+    ui_print "  - This is fallback if bind-mount fails"
+  fi
+  
+  if [ -f "$MODPATH/system/product/overlay/cpu-overlay.apk" ]; then
+    ui_print "✓ CPU overlay: RRO (system/product/overlay/)"
+    ui_print "  - Custom CPU name will be shown in Settings"
+  fi
+  
+  # Device name override
+  if [ -f "$MODPATH/model_name.conf" ]; then
+    local model_name
+    model_name=$(cat "$MODPATH/model_name.conf" 2>/dev/null | tr -d '\r\n')
+    ui_print "✓ Device name override: ${model_name}"
+    ui_print "  - Affects Bluetooth/Hotspot name"
+  fi
+  
+  # Volume optimization
+  if [ -f "$MODPATH/optimize_volume.conf" ]; then
+    ui_print "✓ Volume curve optimization: ENABLED"
+    ui_print "  - Speaker volume will be linearized (13-point curve)"
+  fi
+  
+  # Brightness floor guard
+  if [ -f "$MODPATH/brightness_floor.conf" ]; then
+    ui_print "✓ Brightness floor guard: ENABLED"
+    ui_print "  - Prevents screen from going black in dark environments"
   fi
   
   # Check system.prop
@@ -123,6 +175,7 @@ set_permissions() {
 
   # Set executable permissions for scripts
   [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755
+  [ -f "$MODPATH/post-fs-data.sh" ] && set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
   [ -f "$MODPATH/uninstall.sh" ] && set_perm "$MODPATH/uninstall.sh" 0 0 0755
 
   # Here are some examples:

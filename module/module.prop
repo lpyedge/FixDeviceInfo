@@ -1,6 +1,6 @@
 id=device-info-fix
 name=Device Info Fix
-version=v2.0
-versionCode=2
+version=v2.1
+versionCode=3
 author=Lpyedge
-description=Fix device info (model/brand/props) via system.prop; battery capacity optional via bind-mount patch (preferred) + RRO fallback.
+description=Fix device info (model/brand/props) via system.prop; battery capacity via bind-mount patch (preferred) + RRO fallback; optional CPU name overlay.

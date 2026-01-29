@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 关于本机 → 处理器 -->
+    <string name="device_info_processor">{{CPU_NAME}}</string>
+</resources>

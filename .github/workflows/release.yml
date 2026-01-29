@@ -7,6 +7,10 @@ on:
         description: "Battery capacity (mAh) - 电池容量，例如: 5000"
         required: false
         default: ""
+      cpu_name:
+        description: "CPU display name - 处理器显示名称，例如: Qualcomm Snapdragon 8 Elite"
+        required: false
+        default: ""
       device_id:
         description: "Device codename (display only, safe) - 设备代号（仅显示用途），例如: alioth"
         required: false
@@ -35,6 +39,16 @@ on:
         description: "Build product (ro.build.product) - 构建产品名，例如: OP612DL1"
         required: false
         default: ""
+      optimize_volume:
+        description: "Optimize volume curve - 优化音量曲线（使音量调节更线性）"
+        required: false
+        type: boolean
+        default: false
+      brightness_floor:
+        description: "Enable brightness floor - 启用最低亮度限制（防止自动亮度在暗环境下黑屏）"
+        required: false
+        type: boolean
+        default: false
       clean_history:
         description: 'Clean old releases and tags (keep only latest)'
         required: false
@@ -42,13 +56,14 @@ on:
         default: false
 
 permissions:
-  contents: write  # Required for creating releases and managing tags
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
       BATTERY_CAPACITY: ${{ github.event.inputs.battery_capacity }}
+      CPU_NAME: ${{ github.event.inputs.cpu_name }}
       DEVICE_ID: ${{ github.event.inputs.device_id }}
       MODEL_NAME: ${{ github.event.inputs.model_name }}
       BRAND: ${{ github.event.inputs.brand }}
@@ -56,6 +71,8 @@ jobs:
       LCD_DENSITY: ${{ github.event.inputs.lcd_density }}
       PRODUCT_NAME: ${{ github.event.inputs.product_name }}
       BUILD_PRODUCT: ${{ github.event.inputs.build_product }}
+      OPTIMIZE_VOLUME: ${{ github.event.inputs.optimize_volume }}
+      BRIGHTNESS_FLOOR: ${{ github.event.inputs.brightness_floor }}
 
     steps:
     - uses: actions/checkout@v4
@@ -85,6 +102,7 @@ jobs:
         }
 
         BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        CPU_NAME=$(trim "${CPU_NAME}")
         DEVICE_ID=$(trim "${DEVICE_ID}")
         MODEL_NAME=$(trim "${MODEL_NAME}")
         BRAND=$(trim "${BRAND}")
@@ -93,32 +111,50 @@ jobs:
         PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
         BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
         
-        # Validate battery capacity (if provided)
+        # Validate battery capacity (if provided) - must be 1000-20000 as documented
         if [ -n "${BATTERY_CAPACITY}" ]; then
           if ! [[ "${BATTERY_CAPACITY}" =~ ^[0-9]+$ ]]; then
             echo "❌ Error: battery_capacity must be a positive integer"
             exit 1
           fi
           if [ "${BATTERY_CAPACITY}" -lt 1000 ] || [ "${BATTERY_CAPACITY}" -gt 20000 ]; then
-            echo "⚠️  Warning: battery_capacity ${BATTERY_CAPACITY} seems unusual (expected 1000-20000 mAh)"
+            echo "❌ Error: battery_capacity must be between 1000-20000 mAh"
+            exit 1
           fi
         fi
         
-        # Validate LCD density (if provided)
+        # Validate LCD density (if provided) - must be 120-640 as documented
         if [ -n "${LCD_DENSITY}" ]; then
           if ! [[ "${LCD_DENSITY}" =~ ^[0-9]+$ ]]; then
             echo "❌ Error: lcd_density must be a positive integer"
             exit 1
           fi
           if [ "${LCD_DENSITY}" -lt 120 ] || [ "${LCD_DENSITY}" -gt 640 ]; then
-            echo "⚠️  Warning: lcd_density ${LCD_DENSITY} seems unusual (expected 120-640)"
+            echo "❌ Error: lcd_density must be between 120-640 DPI"
+            exit 1
           fi
         fi
         
-        # Validate device_id format (if provided)
+        # Validate device_id format (if provided) - alphanumeric, dash, underscore only
         if [ -n "${DEVICE_ID}" ]; then
           if ! [[ "${DEVICE_ID}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
             echo "❌ Error: device_id should only contain letters, numbers, hyphens and underscores"
+            exit 1
+          fi
+        fi
+        
+        # Validate product_name format (if provided) - alphanumeric, dash, underscore only
+        if [ -n "${PRODUCT_NAME}" ]; then
+          if ! [[ "${PRODUCT_NAME}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "❌ Error: product_name should only contain letters, numbers, hyphens and underscores"
+            exit 1
+          fi
+        fi
+        
+        # Validate build_product format (if provided) - alphanumeric, dash, underscore only
+        if [ -n "${BUILD_PRODUCT}" ]; then
+          if ! [[ "${BUILD_PRODUCT}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "❌ Error: build_product should only contain letters, numbers, hyphens and underscores"
             exit 1
           fi
         fi
@@ -127,25 +163,20 @@ jobs:
         validate_string() {
           local name=$1
           local value=$2
-          
-          # Check for newlines, carriage returns, or equals signs
           if [[ "$value" == *$'\n'* || "$value" == *$'\r'* || "$value" == *"="* ]]; then
             echo "❌ Error: $name contains invalid characters (newline, carriage return, or equals sign)"
             exit 1
           fi
-          
-          # Check for suspicious shell metacharacters
           if [[ "$value" == *'`'* || "$value" == *'$'* || "$value" == *'\\'* ]]; then
             echo "❌ Error: $name contains potentially dangerous characters"
             exit 1
           fi
         }
         
+        [ -n "${CPU_NAME}" ] && validate_string "cpu_name" "${CPU_NAME}"
         [ -n "${MODEL_NAME}" ] && validate_string "model_name" "${MODEL_NAME}"
         [ -n "${BRAND}" ] && validate_string "brand" "${BRAND}"
         [ -n "${MANUFACTURER}" ] && validate_string "manufacturer" "${MANUFACTURER}"
-        [ -n "${PRODUCT_NAME}" ] && validate_string "product_name" "${PRODUCT_NAME}"
-        [ -n "${BUILD_PRODUCT}" ] && validate_string "build_product" "${BUILD_PRODUCT}"
         
         echo "✅ All input parameters validated successfully"
 
@@ -156,9 +187,110 @@ jobs:
       run: |
         echo "🧹 Cleaning stale build artifacts..."
         rm -rf build dist
+        mkdir -p build dist
         echo "✅ Build environment is clean"
 
-    - name: Apply runtime overrides (capacity / props)
+    - name: Build Battery Overlay APK
+      if: ${{ github.event.inputs.battery_capacity != '' }}
+      env:
+        ALIAS: ${{ secrets.ALIAS }}
+        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        set -euo pipefail
+        echo "🔋 Building battery overlay APK..."
+        
+        BUILD_TOOL_PATH=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+        AAPT2="$BUILD_TOOL_PATH/aapt2"
+        APKSIGNER="$BUILD_TOOL_PATH/apksigner"
+        ANDROID_JAR="$ANDROID_HOME/platforms/android-33/android.jar"
+        
+        # Prepare battery overlay resources
+        mkdir -p build/battery/res/xml
+        
+        # Inject battery capacity into template
+        sed "s|{{BATTERY_CAPACITY}}|${BATTERY_CAPACITY}|g" \
+          overlay-src/battery/res/xml/power_profile.xml.in \
+          > build/battery/res/xml/power_profile.xml
+        
+        cp overlay-src/battery/AndroidManifest.xml build/battery/
+        
+        # Compile and link
+        "$AAPT2" compile --dir build/battery/res -o build/battery/resources.zip
+        "$AAPT2" link -o build/battery/unsigned.apk \
+          --auto-add-overlay \
+          -I "$ANDROID_JAR" \
+          --manifest build/battery/AndroidManifest.xml \
+          build/battery/resources.zip
+        
+        # Sign APK
+        "$APKSIGNER" sign --ks release.jks \
+          --ks-key-alias "$ALIAS" \
+          --ks-pass pass:${KEY_STORE_PASSWORD} \
+          --key-pass pass:${KEY_PASSWORD} \
+          --out build/battery-overlay.apk \
+          build/battery/unsigned.apk
+        
+        echo "✅ Battery overlay APK built successfully"
+
+    - name: Build CPU Overlay APK
+      if: ${{ github.event.inputs.cpu_name != '' }}
+      env:
+        ALIAS: ${{ secrets.ALIAS }}
+        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        set -euo pipefail
+        echo "🖥️ Building CPU overlay APK..."
+        
+        BUILD_TOOL_PATH=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+        AAPT2="$BUILD_TOOL_PATH/aapt2"
+        APKSIGNER="$BUILD_TOOL_PATH/apksigner"
+        ANDROID_JAR="$ANDROID_HOME/platforms/android-33/android.jar"
+        
+        # Prepare CPU overlay resources
+        mkdir -p build/cpu/res/values
+        
+        # XML-escape CPU_NAME to handle &, <, >, ', " safely
+        xml_escape() {
+          printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e "s/'/\&apos;/g" -e 's/"/\&quot;/g'
+        }
+        
+        # Escape for sed replacement (we use # as delimiter)
+        # Need to escape: \, &, #, and newlines
+        sed_escape() {
+          printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/[&#]/\\&/g'
+        }
+        
+        CPU_NAME_ESCAPED=$(xml_escape "${CPU_NAME}")
+        CPU_NAME_SED=$(sed_escape "${CPU_NAME_ESCAPED}")
+        
+        # Inject CPU name into template (use # as delimiter to avoid issues with /)
+        sed "s#{{CPU_NAME}}#${CPU_NAME_SED}#g" \
+          overlay-src/cpu/res/values/strings.xml.in \
+          > build/cpu/res/values/strings.xml
+        
+        cp overlay-src/cpu/AndroidManifest.xml build/cpu/
+        
+        # Compile and link
+        "$AAPT2" compile --dir build/cpu/res -o build/cpu/resources.zip
+        "$AAPT2" link -o build/cpu/unsigned.apk \
+          --auto-add-overlay \
+          -I "$ANDROID_JAR" \
+          --manifest build/cpu/AndroidManifest.xml \
+          build/cpu/resources.zip
+        
+        # Sign APK
+        "$APKSIGNER" sign --ks release.jks \
+          --ks-key-alias "$ALIAS" \
+          --ks-pass pass:${KEY_STORE_PASSWORD} \
+          --key-pass pass:${KEY_PASSWORD} \
+          --out build/cpu-overlay.apk \
+          build/cpu/unsigned.apk
+        
+        echo "✅ CPU overlay APK built successfully"
+
+    - name: Generate system.prop
       run: |
         set -euo pipefail
 
@@ -168,74 +300,49 @@ jobs:
           value="${value%${value##*[![:space:]]}}"
           printf "%s" "$value"
         }
+        
+        # Sanitize value for system.prop: remove newlines and = to prevent injection
+        sanitize_prop_value() {
+          printf '%s' "$1" | tr -d '\r\n=' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+        }
 
-        BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
         DEVICE_ID=$(trim "${DEVICE_ID}")
-        MODEL_NAME=$(trim "${MODEL_NAME}")
-        BRAND=$(trim "${BRAND}")
-        MANUFACTURER=$(trim "${MANUFACTURER}")
+        MODEL_NAME=$(sanitize_prop_value "$(trim "${MODEL_NAME}")")
+        BRAND=$(sanitize_prop_value "$(trim "${BRAND}")")
+        MANUFACTURER=$(sanitize_prop_value "$(trim "${MANUFACTURER}")")
         LCD_DENSITY=$(trim "${LCD_DENSITY}")
         PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
         BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
-        
-        # Create build directory for generated files
-        mkdir -p build/res
-        cp -a app/src/main/res/. build/res/
-        
-        # Battery capacity config (used by service.sh to patch /odm/etc/... at boot)
-        if [ -n "${BATTERY_CAPACITY}" ]; then
-          echo "📊 Setting battery capacity to ${BATTERY_CAPACITY} mAh"
-          echo "${BATTERY_CAPACITY}" > build/battery_capacity.conf
-          # Keep generating overlay resource as optional fallback (may not work on some ROMs)
-          printf '<?xml version="1.0" encoding="utf-8"?>\n<power_profile xmlns:android="http://schemas.android.com/apk/res/android">\n    <item name="battery.capacity">%s</item>\n</power_profile>' "${BATTERY_CAPACITY}" > build/res/xml/power_profile.xml
-        else
-          rm -f build/battery_capacity.conf || true
-          # Prevent a no-config build from accidentally shipping the default (tracked) 4500mAh overlay.
-          rm -f build/res/xml/power_profile.xml || true
-        fi
 
         # Generate system.prop with all provided properties
         if [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ] || [ -n "${PRODUCT_NAME}" ] || [ -n "${BUILD_PRODUCT}" ]; then
           echo "🔧 Generating system.prop with custom properties:"
           {
             if [ -n "${DEVICE_ID}" ]; then
-              # Only set display-related device properties (not ro.product.device to avoid risks)
               echo "ro.product.device.display=${DEVICE_ID}"
               echo "ro.vendor.product.device.display=${DEVICE_ID}"
               echo "  ✓ Device ID (display): ${DEVICE_ID}" >&2
             fi
             
             if [ -n "${MODEL_NAME}" ]; then
-              # Standard Android model properties
               echo "ro.product.model=${MODEL_NAME}"
               echo "ro.product.system.model=${MODEL_NAME}"
               echo "ro.product.vendor.model=${MODEL_NAME}"
               echo "ro.product.odm.model=${MODEL_NAME}"
-              
-              # Market name properties (unified display name)
               echo "ro.product.marketname=${MODEL_NAME}"
               echo "ro.product.odm.marketname=${MODEL_NAME}"
               echo "ro.product.vendor.marketname=${MODEL_NAME}"
-              
-              # OnePlus/OPPO/OPlus specific
               echo "ro.vendor.oplus.market.name=${MODEL_NAME}"
               echo "ro.oppo.market.name=${MODEL_NAME}"
               echo "ro.oppo.market.enname=${MODEL_NAME}"
               echo "ro.vendor.oplus.market.enname=${MODEL_NAME}"
-              
-              # vivo specific
               echo "ro.vendor.vivo.market.name=${MODEL_NAME}"
               echo "ro.vivo.market.name=${MODEL_NAME}"
-              
-              # Huawei/Honor specific
               echo "ro.config.marketing_name=${MODEL_NAME}"
-              
-              # Other vendors (ZTE/ASUS/LG)
               echo "ro.vendor.product.ztename=${MODEL_NAME}"
               echo "ro.vendor.asus.product.mkt_name=${MODEL_NAME}"
               echo "ro.lge.petname=${MODEL_NAME}"
               echo "ro.boot.vendor.lge.petname=${MODEL_NAME}"
-              
               echo "  ✓ Model: ${MODEL_NAME} (with marketname for all vendors)" >&2
             fi
             
@@ -270,57 +377,38 @@ jobs:
               echo "  ✓ Build Product: ${BUILD_PRODUCT}" >&2
             fi
           } > build/system.prop
-          echo "  ✓ system.prop generated"
+          echo "✓ system.prop generated"
         else
           echo "ℹ️  No system properties to override"
-          touch build/no_system_prop
         fi
-
-    - name: Build and Sign APK
-      env:
-        ALIAS: ${{ secrets.ALIAS }}
-        KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      run: |
-        set -euo pipefail
-
-        # If no battery override is configured, skip building the overlay APK.
-        if [ -z "${BATTERY_CAPACITY}" ]; then
-          echo "ℹ️  BATTERY_CAPACITY not set: skip building battery-overlay.apk"
-          exit 0
-        fi
-
-        BUILD_TOOL_PATH=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-        AAPT2="$BUILD_TOOL_PATH/aapt2"
-        APKSIGNER="$BUILD_TOOL_PATH/apksigner"
-        ANDROID_JAR="$ANDROID_HOME/platforms/android-33/android.jar"
-
-        # Compile resources from build directory (not source)
-        "$AAPT2" compile --dir build/res -o build/resources.zip
-        "$AAPT2" link -o build/unsigned.apk \
-          --auto-add-overlay \
-          -I "$ANDROID_JAR" \
-          --manifest app/src/main/AndroidManifest.xml \
-          build/resources.zip
-
-        "$APKSIGNER" sign --ks release.jks \
-          --ks-key-alias "$ALIAS" \
-          --ks-pass pass:${KEY_STORE_PASSWORD} \
-          --key-pass pass:${KEY_PASSWORD} \
-          --out build/battery-overlay.apk \
-          build/unsigned.apk
 
     - name: Package Magisk Module
       run: |
         set -euo pipefail
 
+        trim() {
+          local value="$1"
+          value="${value#${value%%[![:space:]]*}}"
+          value="${value%${value##*[![:space:]]}}"
+          printf "%s" "$value"
+        }
+
         sanitize() {
-          # keep letters/numbers/._- and replace others with '-'
           echo "$1" | sed 's/[^A-Za-z0-9._-]/-/g'
         }
 
+        BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        CPU_NAME=$(trim "${CPU_NAME}")
+        DEVICE_ID=$(trim "${DEVICE_ID}")
+        MODEL_NAME=$(trim "${MODEL_NAME}")
+        BRAND=$(trim "${BRAND}")
+        LCD_DENSITY=$(trim "${LCD_DENSITY}")
+        PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
+        BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
+
         BUILD_SUFFIX=""
         [ -n "${BATTERY_CAPACITY}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-cap${BATTERY_CAPACITY}mAh"
+        [ -n "${CPU_NAME}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-cpu$(sanitize "${CPU_NAME}" | cut -c1-20)"
         [ -n "${DEVICE_ID}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-dev$(sanitize "${DEVICE_ID}")"
         [ -n "${MODEL_NAME}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-model$(sanitize "${MODEL_NAME}")"
         [ -n "${BRAND}" ] && BUILD_SUFFIX="${BUILD_SUFFIX}-brand$(sanitize "${BRAND}")"
@@ -330,74 +418,101 @@ jobs:
 
         ZIP_NAME="DeviceInfoFix${BUILD_SUFFIX}-Module.zip"
         echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+        echo "📦 Building: ${ZIP_NAME}"
 
-        # Install overlay to both vendor and product for better compatibility (only when built)
+        # ============================================
+        # CRITICAL: Overlay APKs MUST be under system/product/overlay
+        # This is the only reliable path for RRO on most ROMs.
+        # Previous attempts using vendor/overlay often failed.
+        # ============================================
+        mkdir -p dist/system/product/overlay
+
+        # Install Battery Overlay APK
         if [ -f build/battery-overlay.apk ]; then
-          mkdir -p dist/system/vendor/overlay
-          mkdir -p dist/system/product/overlay
-          cp build/battery-overlay.apk dist/system/vendor/overlay/
           cp build/battery-overlay.apk dist/system/product/overlay/
-          echo "✓ battery-overlay.apk included (RRO fallback)"
-        else
-          echo "ℹ️  No battery-overlay.apk (no battery override configured)"
+          echo "✓ battery-overlay.apk → system/product/overlay/"
         fi
 
-        # Battery capacity patch config (preferred, works even when overlay is blocked)
-        if [ -f build/battery_capacity.conf ]; then
-          cp build/battery_capacity.conf dist/
-          echo "✓ battery_capacity.conf included (runtime patch on boot)"
-        else
-          echo "ℹ️  No battery capacity override configured"
+        # Install CPU Overlay APK
+        if [ -f build/cpu-overlay.apk ]; then
+          cp build/cpu-overlay.apk dist/system/product/overlay/
+          echo "✓ cpu-overlay.apk → system/product/overlay/"
+        fi
+
+        # Battery capacity config for bind-mount patch (preferred method)
+        if [ -n "${BATTERY_CAPACITY}" ]; then
+          echo "${BATTERY_CAPACITY}" > dist/battery_capacity.conf
+          echo "✓ battery_capacity.conf included (bind-mount patch on boot)"
         fi
         
-        cp module/module.prop dist/
+        # Model name config for device_name override (Bluetooth/Hotspot name)
+        if [ -n "${MODEL_NAME}" ]; then
+          # Sanitize: remove newlines and = to prevent injection
+          safe_model=$(printf '%s' "${MODEL_NAME}" | tr -d '\r\n=' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          echo "${safe_model}" > dist/model_name.conf
+          echo "✓ model_name.conf included (for device_name override)"
+        fi
         
-        # Copy optional scripts
+        # Volume curve optimization config
+        if [ "${OPTIMIZE_VOLUME}" = "true" ]; then
+          touch dist/optimize_volume.conf
+          cp module/volume_curve_patch.xml dist/
+          echo "✓ Volume curve optimization enabled"
+        fi
+        
+        # Brightness floor guard config
+        if [ "${BRIGHTNESS_FLOOR}" = "true" ]; then
+          touch dist/brightness_floor.conf
+          echo "✓ Brightness floor guard enabled"
+        fi
+        
+        # Copy module files
+        cp module/module.prop dist/
         [ -f module/service.sh ] && cp module/service.sh dist/
+        [ -f module/post-fs-data.sh ] && cp module/post-fs-data.sh dist/
         [ -f module/uninstall.sh ] && cp module/uninstall.sh dist/
         
-        # Copy system.prop only if it was generated
+        # Copy scripts directory
+        if [ -d module/scripts ]; then
+          mkdir -p dist/scripts
+          cp module/scripts/*.sh dist/scripts/
+          chmod +x dist/scripts/*.sh
+          echo "✓ Feature scripts included"
+        fi
+        
+        # Copy system.prop if generated
         if [ -f build/system.prop ]; then
           cp build/system.prop dist/
           echo "✓ system.prop included"
-        else
-          echo "ℹ️  No system.prop (no property overrides)"
         fi
 
+        # Setup Magisk installer
         mkdir -p dist/META-INF/com/google/android
-        # Use the standard Magisk installer template
         cp module/META-INF/com/google/android/update-binary dist/META-INF/com/google/android/
         echo '#MAGISK' > dist/META-INF/com/google/android/updater-script
         chmod +x dist/META-INF/com/google/android/update-binary
 
-        # Remove old zip if exists (prevent append)
+        # Create ZIP
         rm -f "${ZIP_NAME}"
-        
         cd dist
         zip -r "../${ZIP_NAME}" .
+        echo "✅ Module packaged: ${ZIP_NAME}"
 
     - name: Clean old releases and tags
       if: ${{ github.event.inputs.clean_history == 'true' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        REPO: ${{ github.repository }}
       run: |
         set -euo pipefail
         echo "🧹 Cleaning old releases and tags..."
-        
-        # Get all releases and delete them
         gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
           echo "Deleting release: $tag"
-          gh release delete "$tag" --yes --cleanup-tag || echo "Failed to delete release $tag"
+          gh release delete "$tag" --yes --cleanup-tag || true
         done
-        
-        # Get all remaining tags and delete them
         git tag -l | while read -r tag; do
-          echo "Deleting tag: $tag"
-          git push origin --delete "$tag" || echo "Failed to delete remote tag $tag"
-          git tag -d "$tag" || echo "Failed to delete local tag $tag"
+          git push origin --delete "$tag" || true
+          git tag -d "$tag" || true
         done
-        
         echo "✅ History cleanup completed"
 
     - name: Generate Release Tag
@@ -411,19 +526,17 @@ jobs:
         }
 
         BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        CPU_NAME=$(trim "${CPU_NAME}")
         DEVICE_ID=$(trim "${DEVICE_ID}")
         LCD_DENSITY=$(trim "${LCD_DENSITY}")
 
-        # Generate version tag based on parameters
-        VERSION="v2.0-$(date +'%Y%m%d-%H%M%S')"
-        
-        # Build descriptive suffix from parameters
+        VERSION="v2.1-$(date +'%Y%m%d-%H%M%S')"
         SUFFIX=""
         [ -n "${BATTERY_CAPACITY}" ] && SUFFIX="${SUFFIX}-${BATTERY_CAPACITY}mAh"
+        [ -n "${CPU_NAME}" ] && SUFFIX="${SUFFIX}-cpu"
         [ -n "${DEVICE_ID}" ] && SUFFIX="${SUFFIX}-${DEVICE_ID}"
         [ -n "${LCD_DENSITY}" ] && SUFFIX="${SUFFIX}-${LCD_DENSITY}dpi"
         
-        # Truncate suffix if too long
         if [ ${#SUFFIX} -gt 50 ]; then
           SUFFIX="${SUFFIX:0:50}"
         fi
@@ -433,7 +546,6 @@ jobs:
         echo "📦 Release tag: $TAG"
 
     - name: Create Release Notes
-      id: notes
       run: |
         trim() {
           local value="$1"
@@ -443,6 +555,7 @@ jobs:
         }
 
         BATTERY_CAPACITY=$(trim "${BATTERY_CAPACITY}")
+        CPU_NAME=$(trim "${CPU_NAME}")
         DEVICE_ID=$(trim "${DEVICE_ID}")
         MODEL_NAME=$(trim "${MODEL_NAME}")
         BRAND=$(trim "${BRAND}")
@@ -451,53 +564,46 @@ jobs:
         PRODUCT_NAME=$(trim "${PRODUCT_NAME}")
         BUILD_PRODUCT=$(trim "${BUILD_PRODUCT}")
 
-        cat > release_notes.md <<EOF
-        ## Device Info Fix Module - Release Build
+        {
+          echo "## Device Info Fix Module - Release Build"
+          echo ""
+          echo "**Build Date**: $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          echo "### Configuration"
+          echo ""
+        } > release_notes.md
         
-        **Build Date**: $(date +'%Y-%m-%d %H:%M:%S UTC')
-        
-        ### Configuration
-        
-        EOF
-        
-        if [ -n "${BATTERY_CAPACITY}" ] || [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ] || [ -n "${PRODUCT_NAME}" ] || [ -n "${BUILD_PRODUCT}" ]; then
-          echo "| 配置项 (Configuration) | 值 | 说明 |" >> release_notes.md
-          echo "|-----------------------|-----|------|" >> release_notes.md
-          [ -n "${BATTERY_CAPACITY}" ] && echo "| Battery Capacity | ${BATTERY_CAPACITY} mAh | 电池容量 (power_profile.xml) |" >> release_notes.md
-          [ -n "${DEVICE_ID}" ] && echo "| Device Codename (display) | ${DEVICE_ID} | 仅显示用途，不改 ro.product.device |" >> release_notes.md
-          [ -n "${MODEL_NAME}" ] && echo "| Model / Market Name | ${MODEL_NAME} | 同步到所有 marketname/petname 属性 |" >> release_notes.md
-          [ -n "${BRAND}" ] && echo "| Brand | ${BRAND} | ro.product.*.brand |" >> release_notes.md
-          [ -n "${MANUFACTURER}" ] && echo "| Manufacturer | ${MANUFACTURER} | ro.product.*.manufacturer |" >> release_notes.md
-          [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI | ro.sf.lcd_density |" >> release_notes.md
-          [ -n "${PRODUCT_NAME}" ] && echo "| Product Name | ${PRODUCT_NAME} | ro.product.*.name |" >> release_notes.md
-          [ -n "${BUILD_PRODUCT}" ] && echo "| Build Product | ${BUILD_PRODUCT} | ro.build.product |" >> release_notes.md
+        if [ -n "${BATTERY_CAPACITY}" ] || [ -n "${CPU_NAME}" ] || [ -n "${DEVICE_ID}" ] || [ -n "${MODEL_NAME}" ] || [ -n "${BRAND}" ] || [ -n "${MANUFACTURER}" ] || [ -n "${LCD_DENSITY}" ] || [ -n "${PRODUCT_NAME}" ] || [ -n "${BUILD_PRODUCT}" ]; then
+          echo "| 配置项 | 值 | 说明 |" >> release_notes.md
+          echo "|--------|-----|------|" >> release_notes.md
+          [ -n "${BATTERY_CAPACITY}" ] && echo "| Battery Capacity | ${BATTERY_CAPACITY} mAh | 电池容量 (bind-mount + RRO) |" >> release_notes.md
+          [ -n "${CPU_NAME}" ] && echo "| CPU Name | ${CPU_NAME} | 处理器显示名称 (RRO) |" >> release_notes.md
+          [ -n "${DEVICE_ID}" ] && echo "| Device Codename | ${DEVICE_ID} | 仅显示用途 |" >> release_notes.md
+          [ -n "${MODEL_NAME}" ] && echo "| Model Name | ${MODEL_NAME} | 机型名称 + marketname |" >> release_notes.md
+          [ -n "${BRAND}" ] && echo "| Brand | ${BRAND} | 品牌 |" >> release_notes.md
+          [ -n "${MANUFACTURER}" ] && echo "| Manufacturer | ${MANUFACTURER} | 制造商 |" >> release_notes.md
+          [ -n "${LCD_DENSITY}" ] && echo "| LCD Density | ${LCD_DENSITY} DPI | 屏幕密度 |" >> release_notes.md
+          [ -n "${PRODUCT_NAME}" ] && echo "| Product Name | ${PRODUCT_NAME} | 产品名称 |" >> release_notes.md
+          [ -n "${BUILD_PRODUCT}" ] && echo "| Build Product | ${BUILD_PRODUCT} | 构建产品名 |" >> release_notes.md
         else
           echo "⚠️ **Default configuration** (no custom parameters)" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "This build only includes the overlay APK without system property overrides." >> release_notes.md
         fi
         
-        cat >> release_notes.md <<EOF
-        
-        ### Installation
-        
-        1. Download \`${ZIP_NAME}\`
-        2. Open Magisk Manager
-        3. Tap "Modules" → "Install from storage"
-        4. Select the downloaded ZIP file
-        5. Reboot your device
-        
-        ### Security
-        
-        - Signed with official keystore
-        - SHA256 checksum: \`$(sha256sum "${ZIP_NAME}" | cut -d' ' -f1)\`
-        
-        ### Support
-        
-        - Magisk: v20.4+
-        - Android: 10+
-        - For issues, please report at: https://github.com/${{ github.repository }}/issues
-        EOF
+        {
+          echo ""
+          echo "### Installation"
+          echo ""
+          echo "1. Download the ZIP file"
+          echo "2. Open Magisk Manager → Modules → Install from storage"
+          echo "3. Select the downloaded ZIP file"
+          echo "4. Reboot your device"
+          echo ""
+          echo "### Technical Notes"
+          echo ""
+          echo "- Overlay APKs are installed to \`system/product/overlay/\` (required path for RRO)"
+          echo "- Battery capacity uses dual approach: bind-mount patch (preferred) + RRO fallback"
+          echo "- CPU name uses RRO overlay targeting \`com.android.settings\`"
+        } >> release_notes.md
         
         echo "📝 Release notes generated"
 

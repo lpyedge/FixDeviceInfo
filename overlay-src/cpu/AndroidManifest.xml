@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fixdeviceinfo.cpu.overlay">
+
+    <application
+        android:hasCode="false"
+        android:label="FixDeviceInfo CPU Overlay">
+
+        <overlay
+            android:targetPackage="com.android.settings"
+            android:isStatic="true"
+            android:priority="999" />
+    </application>
+
+</manifest>

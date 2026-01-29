@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fixdeviceinfo.battery.overlay">
+
+    <application
+        android:hasCode="false"
+        android:label="FixDeviceInfo Battery Overlay">
+
+        <!-- 
+             Note: targetName is intentionally omitted for maximum compatibility.
+             Some ROMs may have different overlayable names or no overlayable at all.
+             isStatic=true with high priority should work on most ROMs.
+        -->
+        <overlay
+            android:targetPackage="android"
+            android:isStatic="true"
+            android:priority="999" />
+    </application>
+
+</manifest>

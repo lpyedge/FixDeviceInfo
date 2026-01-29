@@ -33,6 +33,38 @@ else
   umount "$TARGET_PP" 2>/dev/null || true
 fi
 
+# ==========================================================================
+# Undo volume curve bind-mount
+# ==========================================================================
+VOLUME_TARGET_FILE="$MODDIR/volume_target"
+VOLUME_TARGET=""
+if [ -f "$VOLUME_TARGET_FILE" ]; then
+  VOLUME_TARGET=$(cat "$VOLUME_TARGET_FILE" 2>/dev/null | tr -d '\r\n')
+fi
+
+if [ -n "$VOLUME_TARGET" ]; then
+  ui_print "- Restoring original volume configuration..."
+  if command -v su >/dev/null 2>&1; then
+    su -c "umount '$VOLUME_TARGET' 2>/dev/null" >/dev/null 2>&1 || true
+  else
+    umount "$VOLUME_TARGET" 2>/dev/null || true
+  fi
+fi
+
+# ==========================================================================
+# Restore device_name to system default
+# Delete the custom setting so system uses the default value from build.prop
+# ==========================================================================
+ui_print "- Restoring device name to default..."
+
+# Try to delete device_name setting (let system use default)
+if command -v settings >/dev/null 2>&1; then
+  settings delete global device_name >/dev/null 2>&1 || true
+  settings delete secure bluetooth_name >/dev/null 2>&1 || true
+  ui_print "  ✓ Device name will be restored on next reboot"
+fi
+
+ui_print ""
 ui_print "✓ Module uninstalled successfully"
 ui_print ""
 ui_print "NOTE: Please reboot to apply changes"
