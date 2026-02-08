@@ -65,6 +65,15 @@ fi
 log "Service script completed"
 
 # =============================================================================
+# Feature: Auto-Brightness Clamp Fixer (optional daemon)
+# Runs periodically if auto_brightness_fix.conf exists.
+# =============================================================================
+if [ -f "$MODDIR/scripts/auto_brightness_daemon.sh" ]; then
+    . "$MODDIR/scripts/auto_brightness_daemon.sh"
+    start_auto_brightness_daemon
+fi
+
+# =============================================================================
 # Feature: Device Name Override (runs in background)
 # This needs to wait for settings service, so run async
 # =============================================================================

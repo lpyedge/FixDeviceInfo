@@ -83,6 +83,7 @@ on_install() {
   unzip -o "$ZIPFILE" 'scripts/*' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'battery_capacity.conf' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'model_name.conf' -d "$MODPATH" >/dev/null 2>&1 || true
+  unzip -o "$ZIPFILE" 'auto_brightness_fix.conf' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'optimize_volume.conf' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'volume_curve_patch.xml' -d "$MODPATH" >/dev/null 2>&1 || true
   unzip -o "$ZIPFILE" 'brightness_floor.conf' -d "$MODPATH" >/dev/null 2>&1 || true
@@ -172,6 +173,11 @@ on_install() {
 set_permissions() {
   # The following is the default rule, DO NOT remove
   set_perm_recursive "$MODPATH" 0 0 0755 0644
+
+  # Ensure feature scripts are executable (optional, but allows direct execution)
+  if [ -d "$MODPATH/scripts" ]; then
+    set_perm_recursive "$MODPATH/scripts" 0 0 0755 0755
+  fi
 
   # Set executable permissions for scripts
   [ -f "$MODPATH/service.sh" ] && set_perm "$MODPATH/service.sh" 0 0 0755

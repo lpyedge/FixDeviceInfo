@@ -29,6 +29,7 @@ PRODUCT_NAME=${PRODUCT_NAME:-}
 BUILD_PRODUCT=${BUILD_PRODUCT:-}
 OPTIMIZE_VOLUME=${OPTIMIZE_VOLUME:-}
 BRIGHTNESS_FLOOR=${BRIGHTNESS_FLOOR:-}
+AUTO_BRIGHTNESS_FIX=${AUTO_BRIGHTNESS_FIX:-}
 
 # =============================================================================
 # Utility Functions
@@ -78,6 +79,7 @@ PRODUCT_NAME=$(trim "$PRODUCT_NAME")
 BUILD_PRODUCT=$(trim "$BUILD_PRODUCT")
 OPTIMIZE_VOLUME=$(trim "$OPTIMIZE_VOLUME")
 BRIGHTNESS_FLOOR=$(trim "$BRIGHTNESS_FLOOR")
+AUTO_BRIGHTNESS_FIX=$(trim "$AUTO_BRIGHTNESS_FIX")
 
 # =============================================================================
 # STEP 1: Clean up FIRST (before keystore handling)
@@ -474,6 +476,12 @@ fi
 if [ "$BRIGHTNESS_FLOOR" = "true" ]; then
   echo "true" > "$DIST_DIR/brightness_floor.conf"
   echo "  ✓ brightness_floor.conf included (brightness floor guard)"
+fi
+
+# Auto-brightness clamp fixer daemon config (optional)
+if [ "$AUTO_BRIGHTNESS_FIX" = "true" ]; then
+  echo "true" > "$DIST_DIR/auto_brightness_fix.conf"
+  echo "  ✓ auto_brightness_fix.conf included (auto brightness clamp fixer)"
 fi
 
 # Copy module files

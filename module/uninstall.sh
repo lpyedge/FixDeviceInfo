@@ -57,6 +57,22 @@ fi
 # ==========================================================================
 ui_print "- Restoring device name to default..."
 
+# ==========================================================================
+# Stop auto brightness fixer daemon (best effort)
+# ==========================================================================
+PID_FILE="$MODDIR/.auto_brightness_fix.pid"
+if [ -f "$PID_FILE" ]; then
+  PID=$(cat "$PID_FILE" 2>/dev/null | tr -d '\r\n')
+  if echo "$PID" | grep -Eq '^[0-9]+$'; then
+    if command -v su >/dev/null 2>&1; then
+      su -c "kill $PID 2>/dev/null" >/dev/null 2>&1 || true
+    else
+      kill "$PID" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$PID_FILE" 2>/dev/null || true
+fi
+
 # Try to delete device_name setting (let system use default)
 if command -v settings >/dev/null 2>&1; then
   settings delete global device_name >/dev/null 2>&1 || true

@@ -49,6 +49,11 @@ on:
         required: false
         type: boolean
         default: false
+      auto_brightness_fix:
+        description: "Auto brightness clamp fixer daemon - 自动亮度钳位修复（模块自运行，定期重置自动亮度）"
+        required: false
+        type: boolean
+        default: false
       clean_history:
         description: 'Clean old releases and tags (keep only latest)'
         required: false
@@ -73,6 +78,7 @@ jobs:
       BUILD_PRODUCT: ${{ github.event.inputs.build_product }}
       OPTIMIZE_VOLUME: ${{ github.event.inputs.optimize_volume }}
       BRIGHTNESS_FLOOR: ${{ github.event.inputs.brightness_floor }}
+      AUTO_BRIGHTNESS_FIX: ${{ github.event.inputs.auto_brightness_fix }}
 
     steps:
     - uses: actions/checkout@v4
@@ -471,6 +477,12 @@ jobs:
         if [ "${BRIGHTNESS_FLOOR}" = "true" ]; then
           touch dist/brightness_floor.conf
           echo "✓ Brightness floor guard enabled"
+        fi
+
+        # Auto-brightness clamp fixer daemon config
+        if [ "${AUTO_BRIGHTNESS_FIX}" = "true" ]; then
+          echo "true" > dist/auto_brightness_fix.conf
+          echo "✓ Auto brightness clamp fixer daemon enabled"
         fi
         
         # Copy module files
